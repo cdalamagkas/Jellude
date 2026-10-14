@@ -42,7 +42,7 @@ These are service settings, not settings that Markdown can enable. Their availab
 | Weekly dependency update PRs | Configured in `.github/dependabot.yml`; activation awaits merge to default branch |
 | Dependency graph, Dependabot alerts/security-fix PRs, malware alerts | Enabled and verified in repository settings during preparation; update PRs still need review |
 | Secret scanning and push protection | Not offered in the current private-repository settings; review available public-repository controls at launch |
-| Older CI APK artifacts | Inventory/removal decision pending before source-only publication |
+| Older CI APK artifacts | Owner approved permanent deletion of `Jellude-debug-2`, `Jellude-debug-3` and `Jellude-debug-4`; all three removed and their `verification-*` reports verified as retained. Local APKs and Git history were not changed. |
 
 Do not purchase a plan, grant an integration more access, rewrite history, publish a binary, or change visibility merely to complete a checklist. Resolve any new material decision with the owner.
 
