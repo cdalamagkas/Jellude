@@ -1,6 +1,6 @@
 # Public-launch checklist
 
-Preparation date: 14 October 2026. This document does not authorize or perform a visibility change. The repository remains private during preparation.
+Launch record: 14 October 2026. PR #2 was merged and the repository is now public. This document records observed settings; it does not itself change repository visibility.
 
 ## Owner decisions recorded
 
@@ -36,12 +36,12 @@ These are service settings, not settings that Markdown can enable. Their availab
 
 | Setting/action | Status during private preparation |
 |---|---|
-| Public visibility | Not changed; requires the owner's final publication instruction |
-| Private vulnerability reporting | Public-repository feature; enable immediately at public launch and verify the reporting form |
-| Protect `main` with PRs and successful Android `build` check; block force pushes/deletion | Rule saved and verified in GitHub; explicitly **not enforced** while private on the current plan. Recheck enforcement at public launch. Also requires up-to-date branches/resolved conversations and disallows bypass; no second-person approval required. |
-| Weekly dependency update PRs | Configured in `.github/dependabot.yml`; activation awaits merge to default branch |
+| Public visibility | Verified public in GitHub after PR #2 merged |
+| Private vulnerability reporting | Enabled and verified in public repository settings; use the private reporting link in SECURITY.md |
+| Protect `main` with PRs and successful Android `build` check; block force pushes/deletion | Rule rechecked after publication; the private-plan non-enforcement warning is gone. Requires up-to-date branches/resolved conversations and disallows bypass; no second-person approval required. |
+| Weekly dependency update PRs | Configuration merged to default branch; GitHub offers Edit dependabot.yml. Scheduled update results still require review. |
 | Dependency graph, Dependabot alerts/security-fix PRs, malware alerts | Enabled and verified in repository settings during preparation; update PRs still need review |
-| Secret scanning and push protection | Not offered in the current private-repository settings; review available public-repository controls at launch |
+| Secret scanning and push protection | Both enabled and verified after publication; supported-pattern protection does not replace manual review |
 | Older CI APK artifacts | Owner approved permanent deletion of `Jellude-debug-2`, `Jellude-debug-3` and `Jellude-debug-4`; all three removed and their `verification-*` reports verified as retained. Local APKs and Git history were not changed. |
 
 Do not purchase a plan, grant an integration more access, rewrite history, publish a binary, or change visibility merely to complete a checklist. Resolve any new material decision with the owner.

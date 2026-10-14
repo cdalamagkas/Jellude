@@ -2,6 +2,12 @@
 
 Scope: preparing Jellude 0.1.3's repository for a source-only public launch. This is a preparation record, not an independent security/legal audit, and does not change repository visibility.
 
+## Publication follow-up
+
+PR #2 merged as `f25c91c`; its main-branch workflow passed build, core tests and lint and uploaded only `verification-8`. The repository subsequently showed public visibility in GitHub. Private vulnerability reporting, secret scanning and push protection were enabled and verified. The existing main-branch rule was rechecked with its required build/PR checks and no bypass, force pushes or deletion; the private-plan non-enforcement warning is no longer present. Dependabot configuration is on the default branch.
+
+The post-merge limited scan checked 96 reachable blobs and 75 working files with no common credential-pattern findings or broken local links. The four historical pre-preparation CI job logs were also checked for common key/token/private-LAN-URL patterns: none were found, and authentication values were masked. There are no open or closed issues; the two existing PR descriptions contain development and validation details. These checks remain limited reviews, not a complete security audit.
+
 ## Checks performed
 
 - Repeated the limited scan after the preparation commits: 94 reachable Git blobs across all local refs plus 75 current tracked/unignored working files were checked for common private-key, GitHub-token, AWS-key, Google-API-key, JWT-shaped-value and private-LAN-URL patterns. No matches were found. Also checked reachable historical filenames for `.env`, local SDK properties and keystores. This limited scan cannot prove absence of secrets or identify every sensitive value.
