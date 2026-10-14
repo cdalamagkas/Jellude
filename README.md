@@ -6,7 +6,7 @@ A native Jellyfin music player focused on a verifiable offline library. Applicat
 
 ![Jellude logo](app/src/main/res/drawable-nodpi/jellude_logo.png)
 
-Jellude 0.1.2 introduces the approved jellyfish-and-piano identity and a new application ID. It installs separately from builds named Jellyfin Offline. Previous app data is not migrated.
+Jellude 0.1.3 adds download status icons, system-back navigation within collections, a visible playback queue, and repeat/shuffle feedback. It updates Jellude 0.1.2 in place. Jellude uses a separate application ID from the older Jellyfin Offline builds.
 
 Owner target: **POCO F7 Ultra, Android 16, Jellyfin Server 12.2**. Integration tests have passed on Android 15 and Android 16 emulators. See `docs/COMPATIBILITY.md` for the server API review and remaining physical-device checks.
 
@@ -30,13 +30,15 @@ The project uses AGP 9.3.1, Gradle 9.5.0, Kotlin 2.4.21, and KSP 2.3.12. In Andr
 
 1. Connect, then allow the catalogue import to finish. The refresh button repeats metadata and playlist synchronization.
 2. Browse Albums, Artists (album artists), Songs, or Playlists. Search works against the local catalogue.
-3. Tap download to keep a track or collection offline. Choose a snapshot or synchronized collection. Playlist selections default to synchronized.
+3. Tap download to keep a track or collection offline. Choose a snapshot or synchronized collection. Playlist selections default to synchronized. A download check mark means complete; a downloading symbol means partial, pending, or needing attention. Tap either to manage or repair the download. A failed collection discovery never shows as complete.
 4. Downloads shows the exact verified/expected track count, discovery errors, and per-track failures. **Repair** verifies hashes and requeues damaged/missing files. **Refresh tracks** fetches a new collection membership snapshot.
-5. The bottom player opens playback controls and lyrics. Timestamped lyrics follow playback and can be tapped to seek.
+5. The bottom player opens playback controls and lyrics. Timestamped lyrics follow playback and can be tapped to seek. The queue icon or **View queue** shows playback order, current and next tracks, track selection/removal, and **Clear queue**. Clearing playback does not change playlists or downloads and the cleared queue stays cleared after restarting. Repeat cycles **off → queue → song → off**, with an active icon and mode label; shuffle also shows its active state.
 6. Offline mode blocks server requests. Downloads default to unmetered networks; streaming is permitted while online. The network setting can be changed in Settings.
-7. Playlists supports online creation and queued rename/add/remove/reorder/delete operations for existing playlists. A destructive server deletion requires confirmation. Only one outstanding edit per playlist is accepted in this prototype.
+7. Playlists supports online creation and queued rename/add/remove/reorder operations for existing playlists. Removing an entry changes playlist membership only. Only one outstanding edit per playlist is accepted in this prototype.
 
-Unpinning removes the requirement to retain tracks, not their files. Settings → Remove unpinned audio files explicitly removes files no longer required by any selection. App-managed files are removed on uninstall. USB export is intentionally excluded.
+**Stop keeping offline** removes an item's automatic download/repair requirement and leaves its downloaded files on this phone. **Settings → Clean up unused phone downloads** removes only audio copies no longer needed by any offline selection. Tracks shared with another offline album, artist, song, or playlist stay downloaded. App-managed files are removed on uninstall. USB export is intentionally excluded.
+
+Jellude does not support deleting music files or whole playlists from the server. Its API and outbound HTTP policy block generic server item deletion; only playlist-entry removal can use DELETE. Unsupported deletion edits left by earlier versions are blocked before synchronization. All audio cleanup is local to this phone.
 
 ## Reliability design
 

@@ -60,3 +60,20 @@ The owner also confirmed that 0.1.1 works, approved the Jellude name/logo, and r
 Jellude installs independently of the old application. No data migration is attempted. Earlier reports and old release files retain their original names as historical evidence.
 
 Final 0.1.2 checks: all 17 core tests and all 4 Android 16 integration tests passed; debug APK compilation and Android lint passed. The final source/resource configuration includes the full-color and monochrome adaptive-icon layers.
+
+## Jellude 0.1.3 — offline indicators, navigation, and playback controls
+
+- Download actions now distinguish absent, partial/pending, and complete downloads for songs, albums, artists, and playlists, including shared tracks and failed discovery. Existing selections open repair controls.
+- System Back returns from album/playlist details to their list. Back closes playback/queue dialogs before leaving the app.
+- The playing queue shows current/next tracks and playback order, with jump, remove, and clear controls. Clearing also removes the persisted queue; restarting the playback service does not restore it.
+- Repeat cycles off → entire queue → single song, with a selected icon, single-song icon, and mode label. Shuffle has selected-state feedback.
+- “Stop keeping offline” and “Clean up unused phone downloads” replace pin/unpin terminology. Cleanup preserves shared downloads and avoids active transfers.
+- Whole-playlist deletion is removed. Generic server item deletion and unsupported mutations are blocked by both API and outbound request policy. Legacy queued deletion operations are blocked before any server request. Playlist-entry removal remains supported and preserves the audio files.
+
+Validation: 19 core tests and 7 Android 16/API 36 emulator integration tests passed. Debug APK and test APK compilation passed. Lint passed with 0 errors and 28 warnings (dependency/SDK guidance, exported media service, backup compatibility, and optional KTX style).
+
+The new Android regressions exercise download icons, album/playlist system Back, all three repeat modes, shuffle feedback, queue removal/jumping/clearing and restart, direct server-deletion blocking, legacy edit blocking, and local cleanup with overlapping offline collections. No personal Jellyfin server or connected physical phone was modified during testing.
+
+Local verification used fresh ignored output directories because Windows denied deletion within a pre-existing generated BuildConfig directory. This does not change the project's normal build configuration.
+
+The packaged 0.1.3 APK has the same signing certificate as the preceding local APK. UI screenshots are saved as `screenshots/jellude-013-now-playing.png` and `screenshots/jellude-013-playing-queue.png`.

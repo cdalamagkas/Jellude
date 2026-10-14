@@ -1,6 +1,6 @@
 # Release gates
 
-Jellude is an initial development build, not a production reliability claim. Version 0.1.2 uses application ID `dev.jellude` and the approved Jellude artwork.
+Jellude is an initial development build, not a production reliability claim. Version 0.1.3 uses application ID `dev.jellude` and the approved Jellude artwork.
 
 Owner target: POCO F7 Ultra on Android 16, Jellyfin Server 12.2. See `COMPATIBILITY.md` for version-specific evidence and remaining device checks.
 
@@ -12,8 +12,8 @@ Owner target: POCO F7 Ultra on Android 16, Jellyfin Server 12.2. See `COMPATIBIL
 - Validated temporary transfers, safe resume/restart, bounded retry, manual verification and repair.
 - Metadata and playlist membership refresh, cached lyrics and artwork.
 - Media3 background service, browsable Android Auto library and search callbacks.
-- Persistent playback queue, shuffle/repeat, headset/audio-focus handling.
-- Existing-playlist add/remove/reorder/rename/delete with persistent offline edit records and conservative conflict handling; online playlist creation.
+- Persistent playback queue with view/jump/remove/clear controls, shuffle and off/queue/song repeat feedback, headset/audio-focus handling.
+- Existing-playlist add/remove/reorder/rename with persistent offline edit records and conservative conflict handling; online playlist creation. Server file and whole-playlist deletion are disabled and blocked at the request layer.
 - Core unit tests and Android emulator integration tests.
 
 ## Personal beta gates

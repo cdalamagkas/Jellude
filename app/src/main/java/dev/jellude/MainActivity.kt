@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
@@ -75,6 +76,41 @@ class MusicModel(application: android.app.Application) : AndroidViewModel(applic
     var playing by mutableStateOf(false)
     var position by mutableLongStateOf(0)
     var duration by mutableLongStateOf(0)
+    var repeatMode by mutableIntStateOf(Player.REPEAT_MODE_OFF)
+    var shuffle by mutableStateOf(false)
+    var queue by mutableStateOf<List<QueueTrack>>(emptyList())
+    var queueIndex by mutableIntStateOf(-1)
+    var nextIndex by mutableIntStateOf(-1)
+
+    private fun updatePlayback(player: Player) {
+        playingId = player.currentMediaItem?.mediaId.orEmpty()
+        playing = player.isPlaying
+        duration = player.duration.coerceAtLeast(0)
+        repeatMode = player.repeatMode
+        shuffle = player.shuffleModeEnabled
+        queueIndex = player.currentMediaItemIndex
+        nextIndex = if (repeatMode == Player.REPEAT_MODE_ONE) queueIndex else player.nextMediaItemIndex
+        val timeline = player.currentTimeline
+        val ordered = mutableListOf<QueueTrack>()
+        var index = timeline.getFirstWindowIndex(shuffle)
+        while (index != androidx.media3.common.C.INDEX_UNSET && ordered.size < player.mediaItemCount) {
+            val item = player.getMediaItemAt(index)
+            ordered += QueueTrack(index, item.mediaId, item.mediaMetadata.title?.toString().orEmpty())
+            index = timeline.getNextWindowIndex(index, Player.REPEAT_MODE_OFF, shuffle)
+        }
+        queue = ordered
+    }
+
+    fun cycleRepeat() { controller?.let {
+        it.repeatMode = when (it.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        updatePlayback(it)
+    } }
+    fun toggleShuffle() { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled; updatePlayback(it) } }
+    fun clearQueue() { controller?.let { it.stop(); it.clearMediaItems(); updatePlayback(it) } }
 
     fun action(block: suspend () -> Unit) {
         if (busy) return
@@ -97,14 +133,13 @@ class MusicModel(application: android.app.Application) : AndroidViewModel(applic
         controller = connected
         connected.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
-                playingId = player.currentMediaItem?.mediaId.orEmpty()
-                playing = player.isPlaying
-                duration = player.duration.coerceAtLeast(0)
+                updatePlayback(player)
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 message = "Playback failed. Check this track's download or your server connection."
             }
         })
+        updatePlayback(connected)
         try {
             while (currentCoroutineContext().isActive) {
                 playingId = connected.currentMediaItem?.mediaId.orEmpty()
@@ -132,6 +167,8 @@ class MusicModel(application: android.app.Application) : AndroidViewModel(applic
     }
 }
 
+data class QueueTrack(val index: Int, val id: String, val title: String)
+
 @Composable
 fun MusicApp(model: MusicModel) {
     val repo = model.repo
@@ -149,9 +186,14 @@ fun MusicApp(model: MusicModel) {
     var detail by remember { mutableStateOf<Item?>(null) }
     var selection by remember { mutableStateOf<Item?>(null) }
     var lyrics by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
     var newPlaylist by remember { mutableStateOf(false) }
     val ready = assets.filter { it.state == "Ready" }.map { it.trackId }.toSet()
     val assetMap = assets.associateBy { it.trackId }
+    val downloadStates = remember(catalogue, assets, selections, members, entries) {
+        downloadStates(catalogue, assets, selections, members, entries)
+    }
+    BackHandler(enabled = detail != null && !lyrics && !showQueue && selection == null && !newPlaylist) { detail = null }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(model.message) { model.message?.let { snackbar.showSnackbar(it); model.message = null } }
 
@@ -165,6 +207,7 @@ fun MusicApp(model: MusicModel) {
                             Text(item.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                         }
                         IconButton(onClick = { lyrics = true }) { Icon(Icons.Default.Lyrics, "Lyrics and playback") }
+                        IconButton(onClick = { showQueue = true }) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Playing queue") }
                         IconButton(onClick = { model.controller?.let { if (it.isPlaying) it.pause() else it.play() } }) {
                             Icon(if (model.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause")
                         }
@@ -217,7 +260,7 @@ fun MusicApp(model: MusicModel) {
                                 Row {
                                     TextButton(enabled = !model.busy, onClick = { model.action { repo.repair(s.id, true) } }) { Text("Repair") }
                                     TextButton(enabled = !model.busy && !model.offline, onClick = { model.action { repo.refreshSelection(s); repo.repair(s.id, false) } }) { Text("Refresh tracks") }
-                                    TextButton(onClick = { model.action { repo.release(s.id) } }) { Text("Unpin") }
+                                    TextButton(onClick = { model.action { repo.release(s.id) }; model.message = "Automatic offline keeping stopped. Existing phone downloads remain until cleanup." }) { Text("Stop keeping offline") }
                                 }
                                 expected.filter { it !in ready }.forEach { id ->
                                     Text("${catalogue.find { it.id == id }?.title ?: id}: ${assetMap[id]?.error ?: assetMap[id]?.state ?: "Queued"}",
@@ -240,7 +283,7 @@ fun MusicApp(model: MusicModel) {
                     if (list.isEmpty()) Empty("Nothing here yet", "Synchronize your Jellyfin library using the refresh button.")
                     LazyColumn {
                         items(list, key = { it.id }) { item ->
-                            MusicRow(item, assetMap[item.id], { if (item.kind == "Audio") {
+                            MusicRow(item, assetMap[item.id], downloadStates[item.id] ?: DownloadState.NONE, { if (item.kind == "Audio") {
                                 if (model.offline && item.id !in ready) model.message = "This track is not downloaded"
                                 else {
                                     val playable = list.filter { it.kind == "Audio" && (!model.offline || it.id in ready) }
@@ -260,11 +303,11 @@ fun MusicApp(model: MusicModel) {
                     }
                     Row {
                         Button(onClick = { model.play(tracks.filter { !model.offline || it.id in ready }) }) { Text("Play") }
-                        TextButton(onClick = { selection = item }) { Text("Keep offline") }
+                        TextButton(onClick = { selection = item }) { Text((downloadStates[item.id] ?: DownloadState.NONE).label) }
                     }
                     if (item.kind == "Playlist") PlaylistTools(model, item, catalogue, entries.filter { it.playlistId == item.id }, edits.filter { it.playlistId == item.id && it.status != "Done" })
                     LazyColumn {
-                        itemsIndexed(tracks) { index, track -> MusicRow(track, assetMap[track.id],
+                        itemsIndexed(tracks) { index, track -> MusicRow(track, assetMap[track.id], downloadStates[track.id] ?: DownloadState.NONE,
                             { if (!model.offline || track.id in ready) model.play(tracks.filter { !model.offline || it.id in ready },
                                 tracks.take(index).count { !model.offline || it.id in ready }) else model.message = "This track is not downloaded" }, { selection = track }) }
                     }
@@ -274,17 +317,24 @@ fun MusicApp(model: MusicModel) {
     }
     selection?.let { item ->
         var synced by remember(item.id) { mutableStateOf(item.kind == "Playlist") }
-        AlertDialog(onDismissRequest = { selection = null }, title = { Text("Keep ${item.title} offline") },
+        val existing = selections.find { it.id == item.id }
+        AlertDialog(onDismissRequest = { selection = null }, title = { Text("Offline download: ${item.title}") },
             text = { Column { Text("Original audio files will be stored on this phone.")
-                if (item.kind != "Audio") Row(verticalAlignment = Alignment.CenterVertically) {
+                Text((downloadStates[item.id] ?: DownloadState.NONE).label)
+                if (existing != null) Text("Verify and repair checks your phone's copies and retries missing or damaged tracks. Use Downloads to stop keeping this item offline.")
+                if (existing == null && item.kind != "Audio") Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(synced, { synced = it }); Text("Keep collection contents synchronized")
                 }
                 if (item.kind == "MusicArtist") Text("Includes music where this is the album artist.")
-            } }, confirmButton = { TextButton(enabled = !model.offline, onClick = { model.action { repo.select(item, synced) }; selection = null }) { Text("Download") } },
+            } }, confirmButton = { TextButton(enabled = !model.offline && !model.busy, onClick = { model.action {
+                if (existing != null) { repo.refreshSelection(existing); repo.repair(item.id, true) }
+                else repo.select(item, synced)
+            }; selection = null }) { Text(if (existing != null) "Verify & repair" else "Download") } },
             dismissButton = { TextButton(onClick = { selection = null }) { Text("Cancel") } })
     }
     if (newPlaylist) TextDialog("Create playlist", "", { newPlaylist = false }) { name -> model.action { repo.createPlaylist(name) }; newPlaylist = false }
-    if (lyrics) NowPlaying(model, catalogue.find { it.id == model.playingId }, { lyrics = false })
+    if (lyrics) NowPlaying(model, catalogue.find { it.id == model.playingId }, { lyrics = false }, { lyrics = false; showQueue = true })
+    if (showQueue) PlayingQueue(model, catalogue) { showQueue = false }
 }
 
 @Composable private fun Login(model: MusicModel) {
@@ -305,7 +355,7 @@ fun MusicApp(model: MusicModel) {
     }
 }
 
-@Composable private fun MusicRow(item: Item, asset: Asset?, onClick: () -> Unit, download: () -> Unit) {
+@Composable private fun MusicRow(item: Item, asset: Asset?, downloadState: DownloadState, onClick: () -> Unit, download: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as JelludeApp
     val repo = app.repository
@@ -318,7 +368,17 @@ fun MusicApp(model: MusicModel) {
         leadingContent = { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
             AsyncImage(model = cover, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                 error = rememberVectorPainter(Icons.Default.MusicNote), fallback = rememberVectorPainter(Icons.Default.MusicNote))
-        } }, trailingContent = { IconButton(onClick = download) { Icon(Icons.Default.Download, "Keep offline") } })
+        } }, trailingContent = { IconButton(onClick = download) {
+            Icon(when (downloadState) {
+                DownloadState.COMPLETE -> Icons.Default.DownloadDone
+                DownloadState.PARTIAL -> Icons.Default.Downloading
+                DownloadState.NONE -> Icons.Default.Download
+            }, "${downloadState.label}: ${item.title}", tint = when (downloadState) {
+                DownloadState.COMPLETE -> MaterialTheme.colorScheme.primary
+                DownloadState.PARTIAL -> MaterialTheme.colorScheme.tertiary
+                DownloadState.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
+            })
+        } })
 }
 
 @Composable private fun Empty(title: String, description: String) {
@@ -339,11 +399,12 @@ fun MusicApp(model: MusicModel) {
         Button(enabled = !model.busy && !model.offline, onClick = { model.action { repo.sync() } }) { Text("Sync metadata and playlists") }
         OutlinedButton(enabled = !model.busy, onClick = { model.action { repo.repair(null, true) } }) { Text("Verify and repair downloads") }
         var clean by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { clean = true }) { Text("Remove unpinned audio files") }
-        Text("Downloads are app-managed and removed if the app is uninstalled. Unpinning a collection preserves its files until cleanup.", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = { clean = true }) { Text("Clean up unused phone downloads") }
+        Text("Downloads keeps the items you chose available offline and repairable. Stop keeping offline removes that requirement but leaves existing phone copies. Cleanup removes only copies no longer needed by any offline item. Shared tracks are kept. Uninstalling the app removes its downloads.", style = MaterialTheme.typography.bodySmall)
+        Text("Cleanup affects this phone only. Jellude cannot delete music files from your Jellyfin server.", style = MaterialTheme.typography.bodySmall)
         Text("${stringResource(R.string.app_name)} ${BuildConfig.VERSION_NAME} · Background downloads may wait for Android scheduling. Open the app and use Repair to continue interrupted work.", style = MaterialTheme.typography.bodySmall)
-        if (clean) AlertDialog(onDismissRequest = { clean = false }, title = { Text("Remove unpinned files?") }, text = { Text("Files required by your offline selections will be preserved.") },
-            confirmButton = { TextButton(onClick = { model.action { repo.cleanUnreferenced() }; clean = false }) { Text("Remove") } },
+        if (clean) AlertDialog(onDismissRequest = { clean = false }, title = { Text("Clean up phone downloads?") }, text = { Text("Remove downloaded audio from this phone only when no offline item needs it. Tracks still needed by any downloaded song, album, artist, or playlist are kept. Nothing is deleted from Jellyfin.") },
+            confirmButton = { TextButton(onClick = { model.action { repo.cleanUnreferenced() }; clean = false }) { Text("Clean up phone") } },
             dismissButton = { TextButton(onClick = { clean = false }) { Text("Cancel") } })
         if (signIn) {
             var user by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
@@ -383,7 +444,6 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
         TextButton(enabled = edits.isEmpty(), onClick = { dialog = "Add" }) { Text("Add") }
         TextButton(enabled = edits.isEmpty(), onClick = { dialog = "Edit" }) { Text("Edit entries") }
         TextButton(enabled = edits.isEmpty(), onClick = { dialog = "Rename" }) { Text("Rename") }
-        TextButton(enabled = edits.isEmpty(), onClick = { dialog = "Delete" }) { Text("Delete") }
     }
     TextButton(enabled = !model.offline && !model.busy, onClick = { model.action {
         val repo = model.repo!!
@@ -400,10 +460,6 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
         }
     }
     if (dialog == "Rename") TextDialog("Rename playlist", playlist.title, { dialog = "" }) { model.edit(playlist.id, "Rename", it); dialog = "" }
-    if (dialog == "Delete") AlertDialog(onDismissRequest = { dialog = "" }, title = { Text("Delete playlist from Jellyfin?") },
-        text = { Text("This removes the playlist from the server. Audio tracks are preserved.") },
-        confirmButton = { TextButton(onClick = { model.edit(playlist.id, "Delete", ""); dialog = "" }) { Text("Delete") } },
-        dismissButton = { TextButton(onClick = { dialog = "" }) { Text("Cancel") } })
     if (dialog == "Add" || dialog == "Edit") AlertDialog(onDismissRequest = { dialog = "" }, title = { Text(if (dialog == "Add") "Add a song" else "Edit playlist entries") },
         text = { Column {
             if (dialog == "Add") OutlinedTextField(search, { search = it }, label = { Text("Search songs") })
@@ -424,7 +480,7 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
         } }, confirmButton = { TextButton(onClick = { dialog = "" }) { Text("Close") } })
 }
 
-@Composable private fun NowPlaying(model: MusicModel, track: Item?, dismiss: () -> Unit) {
+@Composable private fun NowPlaying(model: MusicModel, track: Item?, dismiss: () -> Unit, openQueue: () -> Unit) {
     var lines by remember(track?.id) { mutableStateOf<List<Lyric>>(emptyList()) }
     var status by remember(track?.id) { mutableStateOf("Loading lyrics…") }
     LaunchedEffect(track?.id) {
@@ -448,12 +504,18 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
             Slider(value = model.position.toFloat().coerceIn(0f, model.duration.toFloat().coerceAtLeast(1f)),
                 onValueChange = { model.controller?.seekTo(it.toLong()) }, valueRange = 0f..model.duration.toFloat().coerceAtLeast(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                IconButton(onClick = { model.controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }) { Icon(Icons.Default.Shuffle, "Toggle shuffle") }
+                IconToggleButton(checked = model.shuffle, onCheckedChange = { model.toggleShuffle() }) { Icon(Icons.Default.Shuffle, if (model.shuffle) "Shuffle on" else "Shuffle off") }
                 IconButton(onClick = { model.controller?.seekToPreviousMediaItem() }) { Icon(Icons.Default.SkipPrevious, "Previous") }
                 IconButton(onClick = { model.controller?.let { if (it.isPlaying) it.pause() else it.play() } }) { Icon(if (model.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause") }
                 IconButton(onClick = { model.controller?.seekToNextMediaItem() }) { Icon(Icons.Default.SkipNext, "Next") }
-                IconButton(onClick = { model.controller?.let { it.repeatMode = (it.repeatMode + 1) % 3 } }) { Icon(Icons.Default.Repeat, "Cycle repeat mode") }
+                IconToggleButton(checked = model.repeatMode != Player.REPEAT_MODE_OFF, onCheckedChange = { model.cycleRepeat() }) {
+                    Icon(if (model.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, repeatLabel(model.repeatMode))
+                }
             }
+            Text(repeatLabel(model.repeatMode), style = MaterialTheme.typography.labelMedium)
+            val nextTitle = if (model.repeatMode == Player.REPEAT_MODE_ONE) track?.title else model.queue.find { it.index == model.nextIndex }?.title
+            Text("Next: ${nextTitle ?: "End of queue"}", maxLines = 2)
+            TextButton(onClick = openQueue) { Text("View queue (${model.queue.size})") }
             if (status.isNotEmpty()) Text(status)
             LazyColumn(Modifier.heightIn(max = 330.dp)) {
                 itemsIndexed(lines) { index, line -> Text(line.text, Modifier.padding(vertical = 7.dp).clickable(enabled = line.startMs != null) {
@@ -463,4 +525,37 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
             }
         }
     }, confirmButton = { TextButton(onClick = dismiss) { Text("Close") } })
+}
+
+private fun repeatLabel(mode: Int) = when (mode) {
+    Player.REPEAT_MODE_ALL -> "Repeat queue"
+    Player.REPEAT_MODE_ONE -> "Repeat song"
+    else -> "Repeat off"
+}
+
+@Composable private fun PlayingQueue(model: MusicModel, catalogue: List<Item>, dismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = dismiss, title = { Text("Playing queue (${model.queue.size})") }, text = {
+        Column {
+            Text(if (model.shuffle) "Playback order · Shuffle on" else "Playback order")
+            Text(repeatLabel(model.repeatMode), style = MaterialTheme.typography.labelMedium)
+            Text("Removing tracks here changes playback only; playlists and downloads are preserved.", style = MaterialTheme.typography.bodySmall)
+            if (model.queue.isEmpty()) Text("The queue is empty")
+            LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                items(model.queue, key = { it.index }) { entry ->
+                    val item = catalogue.find { it.id == entry.id }
+                    ListItem(headlineContent = { Text(item?.title ?: entry.id) },
+                        supportingContent = { Text(when (entry.index) {
+                            model.queueIndex -> "Now playing"
+                            model.nextIndex -> "Next"
+                            else -> item?.artist.orEmpty()
+                        }) },
+                        modifier = Modifier.clickable { model.controller?.let { it.seekToDefaultPosition(entry.index); it.prepare(); it.play() } },
+                        trailingContent = { IconButton(onClick = { model.controller?.removeMediaItem(entry.index) }) {
+                            Icon(Icons.Default.Close, "Remove from queue: ${item?.title ?: entry.id}")
+                        } })
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = dismiss) { Text("Close") } },
+        dismissButton = { TextButton(enabled = model.queue.isNotEmpty(), onClick = { model.clearQueue() }) { Text("Clear queue") } })
 }

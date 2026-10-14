@@ -34,6 +34,12 @@ class JelludeApp : Application(), coil.ImageLoaderFactory {
                     }
                 }
                 chain.proceed(request)
+            }
+            .addNetworkInterceptor { chain ->
+                val request = chain.request()
+                if (!dev.jellude.core.ServerRequestPolicy.allows(request.method, request.url.pathSegments))
+                    throw IOException("Server operation blocked: Jellude cannot delete server files")
+                chain.proceed(request)
             }.build()
         store.load()?.let(::openSession)
     }

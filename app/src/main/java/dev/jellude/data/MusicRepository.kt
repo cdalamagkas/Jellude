@@ -98,11 +98,16 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
         // Keep unreferenced verified files until the user explicitly cleans them up.
     } }
     suspend fun cleanUnreferenced() = withContext(Dispatchers.IO) {
-        val pinned = dao.members().map { it.trackId }.toSet()
-        for (asset in dao.assets().filter { it.trackId !in pinned && it.state != "Downloading" }) {
-            file(asset.trackId).delete()
-            partial(asset.trackId).delete()
-            dao.putAsset(asset.copy(state = "Not downloaded", bytes = 0, hash = ""))
+        selectionMutex.withLock {
+            val required = dao.members().map { it.trackId }.toSet()
+            for (asset in dao.assets().filter { it.trackId !in required && it.state !in listOf("Downloading", "Verifying") &&
+                it.transferState !in listOf("Downloading", "Verifying") }) {
+                val audio = file(asset.trackId)
+                val temporary = partial(asset.trackId)
+                check(!audio.exists() || audio.delete()) { "Could not remove a phone download. Retry cleanup." }
+                check(!temporary.exists() || temporary.delete()) { "Could not remove a temporary phone download. Retry cleanup." }
+                dao.putAsset(asset.copy(state = "Not downloaded", bytes = 0, hash = "", transferState = "", error = null))
+            }
         }
     }
     suspend fun refreshLyrics(id: String): String? = withContext(Dispatchers.IO) {
@@ -136,6 +141,8 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
     }
     suspend fun queueEdit(playlistId: String, operation: String, value: String) = editMutex.withLock {
+        require(operation in setOf("Add", "Remove", "Move", "Rename")) { "This playlist operation is not supported" }
+        require(dao.item(playlistId)?.kind == "Playlist") { "Only playlists can be edited" }
         require(dao.outstanding(playlistId) == 0) { "Resolve or synchronize this playlist's pending edit first" }
         val entries = dao.entries(playlistId)
         val base = JSONObject().put("title", dao.item(playlistId)?.title.orEmpty()).put("entries", entryJson(entries))
@@ -144,6 +151,10 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
     }
     suspend fun syncEdits() = editMutex.withLock { withContext(Dispatchers.IO) {
         for (edit in dao.pendingEdits()) {
+            if (edit.operation !in setOf("Add", "Remove", "Move", "Rename") || dao.item(edit.playlistId)?.kind != "Playlist") {
+                dao.putEdit(edit.copy(status = "Blocked", error = "This operation is disabled. Jellude cannot delete server files. Discard this local edit."))
+                continue
+            }
             val remote = api.playlist(edit.playlistId)
             val title = api.item(JSONObject(api.call("Users/${session.userId}/Items/${edit.playlistId}"))).title
             val base = JSONObject(edit.baseJson)
@@ -170,16 +181,15 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
                         info.put("Name", edit.value)
                         api.call("Playlists/${edit.playlistId}", method = "POST", body = info)
                     }
-                    "Delete" -> api.call("Items/${edit.playlistId}", method = "DELETE")
                     else -> error("Unknown playlist operation")
                 }
                 dao.putEdit(edit.copy(status = "Done"))
-                if (edit.operation != "Delete") {
+                run {
                     val (entries, tracks) = api.playlist(edit.playlistId)
                     dao.replaceEntries(edit.playlistId, entries, tracks)
                     if (edit.operation == "Rename") dao.item(edit.playlistId)?.let { dao.putItems(listOf(it.copy(title = edit.value))) }
                     dao.selection(edit.playlistId)?.takeIf { it.keepSynced }?.let { refreshSelection(it); repair(it.id, false) }
-                } else dao.deleteItem(edit.playlistId)
+                }
             } catch (e: Exception) {
                 dao.putEdit(edit.copy(status = "Needs review", error = "The server may have applied this edit. Refresh and inspect before discarding it."))
             }
