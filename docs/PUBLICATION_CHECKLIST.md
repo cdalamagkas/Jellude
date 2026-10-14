@@ -40,7 +40,8 @@ These are service settings, not settings that Markdown can enable. Their availab
 | Private vulnerability reporting | Public-repository feature; enable immediately at public launch and verify the reporting form |
 | Protect `main` with PRs and successful Android `build` check; block force pushes/deletion | Rule saved and verified in GitHub; explicitly **not enforced** while private on the current plan. Recheck enforcement at public launch. Also requires up-to-date branches/resolved conversations and disallows bypass; no second-person approval required. |
 | Weekly dependency update PRs | Configured in `.github/dependabot.yml`; activation awaits merge to default branch |
-| Dependency/secret scanning and push protection | Review available public-repository controls at launch; do not claim enabled without verification |
+| Dependency graph, Dependabot alerts/security-fix PRs, malware alerts | Enabled and verified in repository settings during preparation; update PRs still need review |
+| Secret scanning and push protection | Not offered in the current private-repository settings; review available public-repository controls at launch |
 | Older CI APK artifacts | Inventory/removal decision pending before source-only publication |
 
 Do not purchase a plan, grant an integration more access, rewrite history, publish a binary, or change visibility merely to complete a checklist. Resolve any new material decision with the owner.

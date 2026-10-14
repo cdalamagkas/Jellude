@@ -13,6 +13,7 @@ Scope: preparing Jellude 0.1.3's repository for a source-only public launch. Thi
 - Checked relative Markdown/image links and `git diff --check`.
 - Verified action commit hashes against the official repositories' existing version tags; no dependency or tool version upgrade was made.
 - Saved a `main` branch protection rule after owner-approved GitHub reauthentication. GitHub explicitly reports that enforcement is unavailable while this repository is private on the current plan. No subscription was purchased or visibility changed.
+- Enabled and verified the dependency graph, Dependabot vulnerability alerts/security-fix PRs, and malware alerts. Private vulnerability reporting and secret-scanning controls were not offered on this private repository's settings page and remain public-launch checks.
 
 The app's functional code, dependency versions and Android resources are unchanged by this preparation. The preceding app revision passed 19 core and 7 Android 16 tests. The preparation PR's own GitHub build/lint/core-test results should be checked before merge; earlier results must not be substituted for a failed new workflow run.
 
