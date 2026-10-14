@@ -1,85 +1,84 @@
 # Jellude
 
-Private repository: [cdalamagkas/Jellude](https://github.com/cdalamagkas/Jellude). See [GitHub workflow](docs/GITHUB_WORKFLOW.md) for cloning, branches, checks, and APK artifacts.
+<img src="app/src/main/res/drawable-nodpi/jellude_logo.png" width="180" alt="Jellude logo">
 
-A native Jellyfin music player focused on a verifiable offline library. Application ID and code namespace: `dev.jellude`. Android 10 or newer.
+An Android music player for your Jellyfin server, focused on a verifiable offline library: download collections, see what is missing, and repair incomplete or damaged phone copies.
 
-![Jellude logo](app/src/main/res/drawable-nodpi/jellude_logo.png)
+**Experimental · Source-only distribution · Android 10+**
 
-Jellude 0.1.3 adds download status icons, system-back navigation within collections, a visible playback queue, and repeat/shuffle feedback. It updates Jellude 0.1.2 in place. Jellude uses a separate application ID from the older Jellyfin Offline builds.
+Jellude is an independent project, unaffiliated with Jellyfin. It is under active development and has not been independently audited. Public availability is not a production-readiness claim. Official signed APK releases are planned for later; [build from source](#build-from-source) for now.
 
-Owner target: **POCO F7 Ultra, Android 16, Jellyfin Server 12.2**. Integration tests have passed on Android 15 and Android 16 emulators. See `docs/COMPATIBILITY.md` for the server API review and remaining physical-device checks.
+## AI development disclosure
 
-## Run
+Jellude's own application code was written entirely using AI coding tools, under human direction. The project owner defines the requirements, tests the app, and approves changes and releases. Third-party libraries retain their respective authorship and licenses. Human-written contributions are welcome.
 
-Open this directory in Android Studio and run the `app` configuration. Enter your Jellyfin server URL (including any reverse-proxy base path), username, and password on the phone. HTTPS is recommended. The app uses your account's download and playlist permissions.
+AI-generated code can contain bugs, security issues, and incorrect assumptions. Passing tests and successful personal use do not establish production readiness or constitute an independent audit. Review the known limitations and report problems through GitHub Issues. Never include passwords, access tokens, or private server details in public reports.
 
-Build from a terminal with **JDK 21**, Android SDK platform 35, and Build Tools 36.0.0:
+## Features
 
-```powershell
-.\gradlew.bat :core:test :app:assembleDebug :app:lintDebug
+- Stream from Jellyfin or play verified downloads while offline.
+- Download songs, albums, album artists, and playlists; keep a snapshot or synchronize collection membership.
+- See partial/complete download states and expected/verified track counts; verify and repair missing or corrupt downloads.
+- Synchronize server metadata, artwork, and lyrics without unnecessarily replacing audio.
+- Read lyrics, including timestamped lyrics when supplied by the server.
+- View the playing queue, see the next track, jump/remove/clear tracks, shuffle, or repeat the queue or one song.
+- Create server playlists and queue entry additions/removals/reordering or renaming, with conflict/uncertain-outcome handling.
+- Browse the media library through Android Auto. Full car/head-unit validation remains outstanding.
+
+Jellude cannot delete music files from your Jellyfin server. It does not offer whole-playlist deletion. Phone-download cleanup is local; removing a playlist entry changes membership only. USB export is outside the project's scope.
+
+<p>
+  <img src="docs/screenshots/jellude-013-now-playing.png" width="260" alt="Now playing with lyrics and repeat-song feedback, using generated test music">
+  <img src="docs/screenshots/jellude-013-playing-queue.png" width="260" alt="Playing queue showing current and next tracks, remove actions and Clear queue, using generated test music">
+</p>
+
+## Build from source
+
+1. Clone [cdalamagkas/Jellude](https://github.com/cdalamagkas/Jellude) and open the repository root in Android Studio.
+2. Use **Gradle JVM/JDK 21**, Android SDK **platform 35**, and **Build Tools 36.0.0**. Let Android Studio create the machine-local SDK configuration.
+3. Sync Gradle and run the `app` configuration, or build from a terminal:
+
+```sh
+./gradlew :core:test :app:assembleDebug :app:lintDebug
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Packaged builds use the name `Jellude-<version>-debug.apk` in `releases/`. This is a development build signed with a debug key, not a Play Store release.
+On Windows PowerShell use `.\gradlew.bat` instead of `./gradlew`. The development APK is written to `app/build/outputs/apk/debug/app-debug.apk`; install it on your phone yourself. It is signed with your machine's debug key and may not update a build signed on another computer. Debug builds and CI reports are development tools, not official production releases.
 
-This workspace also contains ignored project-local tools under `.tools/`, and a machine-local SDK location in `local.properties`. These are not required when opening the source on another machine with Android Studio.
+The project uses AGP 9.3.1, Gradle 9.5.0, Kotlin 2.4.21 and KSP 2.3.12. Compile/target SDK is 35; minimum SDK is 29. The application ID is `dev.jellude`.
 
-The project uses AGP 9.3.1, Gradle 9.5.0, Kotlin 2.4.21, and KSP 2.3.12. In Android Studio, keep **Gradle JVM = JVM 21**, then sync the project. See `docs/BUILD_TOOLS_UPGRADE.md` for the migration details.
+## Connect and keep music offline
 
-## Use
+1. Enter your Jellyfin URL (including any reverse-proxy base path), username and password. Prefer HTTPS and an account with only the download/playlist permissions you need. Wait for catalogue synchronization.
+2. Browse or search Albums, Artists (album artists), Songs, or Playlists. Tap a download icon and choose a snapshot or synchronized collection. Playlists default to synchronized membership.
+3. A downloading symbol means partial, pending, or needing attention; a download check mark means complete according to the local catalogue/verified asset records. Tap the action or open Downloads to inspect it. A failed discovery is never shown as complete.
+4. In Downloads, **Verify & repair** checks phone files and requeues missing or damaged tracks. **Refresh tracks** updates collection membership. Metadata/playlist synchronization is also available in Settings.
+5. Enable **Offline mode** to block the app's server requests. Downloads default to unmetered networks. Original audio playback depends on your device's codec support.
 
-1. Connect, then allow the catalogue import to finish. The refresh button repeats metadata and playlist synchronization.
-2. Browse Albums, Artists (album artists), Songs, or Playlists. Search works against the local catalogue.
-3. Tap download to keep a track or collection offline. Choose a snapshot or synchronized collection. Playlist selections default to synchronized. A download check mark means complete; a downloading symbol means partial, pending, or needing attention. Tap either to manage or repair the download. A failed collection discovery never shows as complete.
-4. Downloads shows the exact verified/expected track count, discovery errors, and per-track failures. **Repair** verifies hashes and requeues damaged/missing files. **Refresh tracks** fetches a new collection membership snapshot.
-5. The bottom player opens playback controls and lyrics. Timestamped lyrics follow playback and can be tapped to seek. The queue icon or **View queue** shows playback order, current and next tracks, track selection/removal, and **Clear queue**. Clearing playback does not change playlists or downloads and the cleared queue stays cleared after restarting. Repeat cycles **off → queue → song → off**, with an active icon and mode label; shuffle also shows its active state.
-6. Offline mode blocks server requests. Downloads default to unmetered networks; streaming is permitted while online. The network setting can be changed in Settings.
-7. Playlists supports online creation and queued rename/add/remove/reorder operations for existing playlists. Removing an entry changes playlist membership only. Only one outstanding edit per playlist is accepted in this prototype.
+**Stop keeping offline** stops automatic retention/repair for that selection but leaves existing phone copies. **Settings → Clean up unused phone downloads** removes only audio no remaining offline selection needs. Tracks shared by another downloaded song/album/artist/playlist are preserved. Uninstalling or clearing the app's storage removes app-managed downloads.
 
-**Stop keeping offline** removes an item's automatic download/repair requirement and leaves its downloaded files on this phone. **Settings → Clean up unused phone downloads** removes only audio copies no longer needed by any offline selection. Tracks shared with another offline album, artist, song, or playlist stay downloaded. App-managed files are removed on uninstall. USB export is intentionally excluded.
+Tap the bottom player for playback and lyrics, or its queue icon for the playing queue. Repeat cycles **off → queue → song → off**. Clearing the queue does not remove playlists or downloads and stays cleared after the playback service restarts.
 
-Jellude does not support deleting music files or whole playlists from the server. Its API and outbound HTTP policy block generic server item deletion; only playlist-entry removal can use DELETE. Unsupported deletion edits left by earlier versions are blocked before synchronization. All audio cleanup is local to this phone.
+## Compatibility and current limits
 
-## Reliability design
+The owner reports successful use of development version 0.1.3 on a **POCO F7 Ultra with Android 16 and Jellyfin Server 12.2**. Automated mock-server integration tests have run on Android 15 and 16 emulators; the latest 0.1.3 regression run passed 19 core tests and 7 Android 16 integration tests. These results do not establish compatibility with every server, phone, format, or proxy. See [compatibility evidence](docs/COMPATIBILITY.md) and [test results](docs/TEST_RESULTS.md).
 
-- Room stores catalogue data, selection manifests, local assets, lyrics, playlist entries, and pending mutations.
-- A collection's membership is published only after every API page succeeds. A changed total or repeated page causes a visible discovery error.
-- Original audio transfers use temporary files. HTTP resume requires a strong ETag, matching byte range, and unchanged source validator. Servers that ignore Range trigger a clean restart.
-- Completed transfers must pass byte-length checks when available, SHA-256 calculation, and Android audio-container inspection before publication.
-- Atomic file replacement publishes audio; startup reconciliation detects database/filesystem disagreements. A crash can require a fresh download, but does not make a partial file playable.
-- A source update keeps the previous verified copy playable while its replacement downloads. Source change detection uses Jellyfin media-source ETags when supplied. A local hash alone does not prove equality to server contents.
-- A single track can satisfy multiple selections. Removing a selection does not delete shared audio.
-- Background jobs are durable and constrained; transfers have bounded retries and three active transfer slots. Manual repair can retry exhausted jobs.
-- Metadata updates do not rewrite embedded audio tags. Lyrics and artwork failures do not invalidate playable music.
-- Playback uses a MediaLibraryService for phone controls and Android Auto. Verified files take precedence over streaming. Queue, position, shuffle, and repeat settings are saved per account namespace.
-- Playlist edits record a base snapshot including entry IDs and order. Conflicting snapshots stop the mutation. Before sending, a mutation is marked Sending; unknown outcomes require inspection. HTTP automatic connection retries are disabled to prevent implicit mutation replay.
-- Tokens are encrypted with an Android Keystore key; passwords are not persisted. Account-specific databases and asset directories use a server/user namespace. Backups and device transfers of app data are excluded.
+- Long background downloads still depend on Android job quotas and manufacturer battery restrictions. Large-library, reboot, low-space and extended-offline reliability need more physical-device testing.
+- Real Android Auto driving UI, voice control and reconnection need car/head-unit validation.
+- Original-format downloads only; no transcoded downloads or conversion.
+- One outstanding edit per playlist; no automatic three-way merge or offline playlist creation. Concurrent server edits can still race a mutation.
+- Account switching/sign-out with local-retention controls is unfinished. No broad multi-account support is claimed.
+- First Room schema only; future changes must provide explicit migrations.
 
-## Tests
+See the [roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), and [release policy](docs/RELEASING.md).
 
-```powershell
-.\gradlew.bat :core:test
-.\gradlew.bat :app:connectedDebugAndroidTest
-.\gradlew.bat :app:lintDebug
-```
+## Contributing, privacy and security
 
-The core tests exercise incomplete albums, overlap, duplicate playlist entries, lyric seeking, validated HTTP ranges, ignored ranges, changed validators, interrupted responses, cancellation, and invalid responses.
+- [Contributing](CONTRIBUTING.md): setup, tests, PR expectations and AI-assistance disclosure.
+- [Report a bug or request a feature](https://github.com/cdalamagkas/Jellude/issues/new/choose). Use test data and redact sensitive information.
+- [Security policy](SECURITY.md): report vulnerabilities privately; do not disclose exploits in public issues.
+- [Privacy](PRIVACY.md): connections, credentials, local storage, permissions and cleanup.
+- [Changelog](CHANGELOG.md) and [GitHub workflow](docs/GITHUB_WORKFLOW.md).
 
-Android integration tests run against an in-process mock Jellyfin server with generated WAV audio, without personal server credentials. They exercise the real Room database, WorkManager downloads, Compose library/download screens, MediaLibraryService, offline audio playback, duplicate playlist entry removal, conflicts, and uncertain mutation outcomes.
+## License and attribution
 
-## Prototype limits and remaining validation
-
-The owner reports that the initial APK works on the POCO F7 Ultra with Android 16 and Jellyfin Server 12.2. This report does not replace the individual long-session, corruption, and Android Auto release gates below.
-
-- Real Jellyfin server/version, reverse proxy, FLAC/MP3/AAC/Opus library, and account permission compatibility must be checked with your installation. No personal server was accessed during development.
-- Android Auto browsing is implemented and its service can be exercised by tests; a car or Desktop Head Unit must validate the full driving interface, voice integration, and reconnection. A sideloaded debug build may require Android Auto's developer option for unknown sources.
-- WorkManager currently owns long transfers as foreground work. Android quotas and manufacturer battery restrictions still apply. User-initiated data-transfer jobs are a follow-up for large, immediate collections on newer Android versions. Force-stopped apps resume maintenance after reopening.
-- Only one outstanding edit per playlist is allowed. Conflicts and unknown outcomes are resolved by refreshing, inspecting, discarding the local edit, and reapplying if appropriate. There is no automatic three-way playlist merge. Offline creation of new playlists is not yet implemented.
-- Concurrent external playlist edits can occur between comparison and mutation; Jellyfin does not provide an assumed atomic compare-and-swap here. Incremental operations reduce the affected scope.
-- The active account can be reauthenticated. Switching to a different account within the same process is deliberately rejected; a dedicated account management screen remains to be implemented.
-- Original-format playback depends on device codec support. No transcoded downloads or conversion are implemented.
-- No automatic source equality proof is possible when Jellyfin supplies no reliable source validator. Manual server-side file replacement compatibility needs testing.
-- Large-library paging, filesystem/database crash recovery, low-space behavior, reboot/force-stop behavior, and Android 16 scheduling need additional physical-device soak testing.
-- The first schema is exported. Future releases must add explicit migrations; destructive migration fallback is not enabled.
-
-See `docs/ROADMAP.md` for the remaining release gates.
+Jellude's own code and artwork are offered under **GNU GPL version 3 only (`GPL-3.0-only`)**, to the extent licensable rights apply. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Separate [branding guidance](docs/branding/README.md) requires modified distributions to use a distinct identity and avoid implying maintainer endorsement, without restricting GPL copyright permissions.

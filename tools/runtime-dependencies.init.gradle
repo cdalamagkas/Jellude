@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Usage: ./gradlew -I tools/runtime-dependencies.init.gradle :app:runtimeDependencyInventory
+gradle.projectsEvaluated {
+    def app = rootProject.project(':app')
+    app.tasks.register('runtimeDependencyInventory') {
+        doLast {
+            def artifacts = app.configurations.getByName('releaseRuntimeClasspath').resolvedConfiguration.resolvedArtifacts
+            def rows = artifacts.findAll { it.moduleVersion.id.group != app.rootProject.name }.collect { a ->
+                "${a.moduleVersion.id.group}\t${a.moduleVersion.id.name}\t${a.moduleVersion.id.version}"
+            }.unique().sort()
+            def output = new File(app.rootProject.projectDir, 'build/reports/runtime-dependencies.tsv')
+            output.parentFile.mkdirs()
+            output.text = rows.join('\n') + '\n'
+            println "Recorded ${rows.size()} external runtime coordinates in build/reports/runtime-dependencies.tsv"
+        }
+    }
+}
