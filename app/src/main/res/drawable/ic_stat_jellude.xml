@@ -1,0 +1,5 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <!-- A small, solid jellyfish silhouette for Android's single-color status icons. -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M4,10C4,5.58 7.58,2 12,2C16.42,2 20,5.58 20,10C20,11 18.8,11.7 17,12L17,10L15.5,10L15.5,12.2L12.75,12.4L12.75,10L11.25,10L11.25,12.4L8.5,12.2L8.5,10L7,10L7,12C5.2,11.7 4,11 4,10Z M6,12C6,15 5.5,16 4.5,17.5C3.7,18.7 3.8,20 4.5,21C4.3,18.5 8,18 8,12.5Z M9,13C9,16.8 6.5,18 7,20.5C7.2,21.4 7.8,22 8.5,22.5C7.5,20.2 11,19 11,13Z M11.5,13L11.5,18C11.5,20 12,21.5 12,22C12.5,21.5 13,20 13,18L13,13Z M13.5,13C13.5,19 17,20.2 16,22.5C16.7,22 17.3,21.4 17.5,20.5C18,18 15.5,16.8 15.5,13Z M16.5,12.5C16.5,18 20.2,18.5 20,21C20.7,20 20.8,18.7 20,17.5C19,16 18.5,15 18.5,12Z" />
+</vector>

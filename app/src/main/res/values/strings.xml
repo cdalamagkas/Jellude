@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Jellude</string>
+    <string name="download_notification_title">Jellude · Downloading music</string>
+</resources>
