@@ -4,6 +4,7 @@ import android.content.ComponentName
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,6 +17,7 @@ import dev.jellude.playback.MusicService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.guava.await
 import okhttp3.mockwebserver.*
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.Buffer
 import org.json.JSONArray
 import org.json.JSONObject
@@ -119,6 +121,7 @@ class OfflineIntegrationTest {
         }
         compose.onNodeWithText("Your music").assertIsDisplayed()
         compose.onNodeWithText("Test album").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Download for offline use: Test album").assertIsDisplayed()
         repo.select(repo.dao.item(albumId)!!, false)
         awaitComplete()
         assertEquals(12, repo.dao.assets().count { it.state == "Ready" })
@@ -130,6 +133,7 @@ class OfflineIntegrationTest {
         awaitComplete()
         assertEquals(before + 1, downloads.get())
         assertTrue(repo.file(id).readBytes().take(4).toByteArray().contentEquals("RIFF".toByteArray()))
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Downloaded: Test album").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText("Downloads").performClick()
         compose.onNodeWithText("12 / 12 tracks verified", substring = true).assertIsDisplayed()
     }
@@ -182,6 +186,120 @@ class OfflineIntegrationTest {
         repo.syncEdits()
         assertEquals(1, mutations.get())
         assertTrue(repo.dao.pendingEdits().isEmpty())
+    }
+    @Test fun partialDownloadIndicatorsAndBackNavigateInsideTheApp() = runBlocking {
+        val first = tracks.first().getString("Id")
+        repo.dao.putAsset(Asset(first, "Ready"))
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Partially downloaded or pending: Test album").fetchSemanticsNodes().size == 1 }
+        compose.onNodeWithText("Test album").performClick()
+        compose.onNodeWithText("Play", substring = false).assertIsDisplayed()
+        pressSystemBack()
+        compose.onNodeWithText("Your music").assertIsDisplayed()
+        assertEquals(Lifecycle.State.RESUMED, scenario!!.state)
+        compose.onNodeWithText("Playlists").performClick()
+        compose.onNodeWithContentDescription("Partially downloaded or pending: Test playlist").assertIsDisplayed()
+        compose.onNodeWithText("Test playlist").performClick()
+        compose.onNodeWithContentDescription("Back").assertIsDisplayed()
+        compose.onNodeWithText("Play", substring = false).assertIsDisplayed()
+        pressSystemBack()
+        compose.onNodeWithText("Your playlists").assertIsDisplayed()
+        // Failure to discover a full collection remains incomplete even if all known tracks are ready.
+        repo.dao.putAssetsForTest(tracks.map { Asset(it.getString("Id"), "Ready") })
+        repo.dao.putSelection(Selection(albumId, "Test album", "MusicAlbum", false, error = "Discovery failed"))
+        val state = downloadStates(repo.dao.items(), repo.dao.assets(), repo.dao.selections(), repo.dao.members(), repo.dao.entries(playlistId))
+        assertEquals(DownloadState.PARTIAL, state[albumId])
+        assertEquals(DownloadState.COMPLETE, state[playlistId])
+    }
+    @Test fun queueRepeatAndShuffleControlsReflectThePlayerAndClearPersistently() = runBlocking {
+        repo.select(repo.dao.item(albumId)!!, false)
+        awaitComplete()
+        lateinit var model: MusicModel
+        scenario!!.onActivity { model = ViewModelProvider(it)[MusicModel::class.java] }
+        compose.waitUntil(15_000) { model.controller != null }
+        val songs = repo.dao.items().filter { it.kind == "Audio" }.sortedBy { it.number }
+        compose.runOnIdle { model.play(songs); model.controller!!.pause() }
+        compose.waitUntil(15_000) { model.queue.size == 12 }
+        compose.onNodeWithContentDescription("Lyrics and playback").performClick()
+        compose.onNodeWithContentDescription("Repeat off").performClick()
+        compose.onNodeWithContentDescription("Repeat queue").assertIsOn()
+        compose.runOnIdle { assertEquals(Player.REPEAT_MODE_ALL, model.controller!!.repeatMode) }
+        compose.onNodeWithContentDescription("Repeat queue").performClick()
+        compose.onNodeWithContentDescription("Repeat song").assertIsOn()
+        screenshot("now-playing")
+        compose.runOnIdle { assertEquals(Player.REPEAT_MODE_ONE, model.controller!!.repeatMode) }
+        compose.onNodeWithContentDescription("Repeat song").performClick()
+        compose.onNodeWithContentDescription("Repeat off").assertIsOff()
+        compose.onNodeWithContentDescription("Shuffle off").performClick()
+        compose.onNodeWithContentDescription("Shuffle on").assertIsOn()
+        compose.onNodeWithContentDescription("Shuffle on").performClick()
+        compose.onNodeWithText("View queue (12)").performClick()
+        compose.onNodeWithText("Now playing", substring = false).assertIsDisplayed()
+        compose.onNodeWithText("Next", substring = false).assertIsDisplayed()
+        screenshot("playing-queue")
+        compose.onNodeWithContentDescription("Remove from queue: Test song 2").performClick()
+        compose.waitUntil(10_000) { model.queue.size == 11 }
+        compose.runOnIdle { assertFalse(model.queue.any { it.id == songs[1].id }) }
+        compose.onNodeWithText("Test song 3", substring = false).performClick()
+        compose.waitUntil(10_000) { model.playingId == songs[2].id }
+        compose.runOnIdle { model.controller!!.pause() }
+        compose.onNodeWithText("Clear queue", substring = false).performClick()
+        compose.onNodeWithText("The queue is empty").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, model.controller!!.mediaItemCount) }
+        val key = "queue-${repo.session.namespace}"
+        compose.waitUntil(10_000) { !app.getSharedPreferences("playback", android.content.Context.MODE_PRIVATE).contains(key) }
+        compose.onNodeWithText("Close", substring = false).performClick()
+        scenario!!.close()
+        withContext(Dispatchers.Main) { app.stopService(android.content.Intent(app, MusicService::class.java)) }
+        delay(500)
+        val browser = withContext(Dispatchers.Main) {
+            MediaBrowser.Builder(app, SessionToken(app, ComponentName(app, MusicService::class.java))).buildAsync().await()
+        }
+        try {
+            delay(500)
+            withContext(Dispatchers.Main) { assertEquals(0, browser.mediaItemCount) }
+        } finally { withContext(Dispatchers.Main) { browser.release() } }
+    }
+    @Test fun serverFileDeletionIsBlockedIncludingLegacyEditsAndCleanupPreservesSharedTracks() = runBlocking {
+        val first = tracks.first().getString("Id")
+        try { repo.api.call("Items/$first", method = "DELETE"); fail("Deletion must be blocked") } catch (_: IllegalArgumentException) { }
+        for (request in listOf(
+            repo.api.request("Items/$first").delete().build(),
+            repo.api.request("Items/Delete").post("{}".toRequestBody()).build()
+        )) {
+            val before = server.requestCount
+            try { app.http.newCall(request).execute().close(); fail("Network guard must block deletion") } catch (_: java.io.IOException) { }
+            assertEquals(before, server.requestCount)
+        }
+        try { repo.queueEdit(playlistId, "Delete", ""); fail("Playlist deletion is disabled") } catch (_: IllegalArgumentException) { }
+        repo.dao.putEdit(PlaylistEdit("legacy-delete", playlistId, "Delete", "", "{}"))
+        val before = server.requestCount
+        repo.syncEdits()
+        assertEquals(before, server.requestCount)
+        assertEquals(1, repo.dao.outstanding(playlistId))
+        assertTrue(repo.dao.pendingEdits().isEmpty())
+        repo.select(repo.dao.item(albumId)!!, false)
+        awaitComplete()
+        repo.select(repo.dao.item(playlistId)!!, false)
+        repo.release(albumId)
+        repo.cleanUnreferenced()
+        assertTrue(repo.file(first).exists())
+        assertTrue(repo.file(tracks[1].getString("Id")).exists())
+        assertFalse(repo.file(tracks[2].getString("Id")).exists())
+        assertEquals(0, mutations.get())
+    }
+    private suspend fun LibraryDao.putAssetsForTest(assets: List<Asset>) { assets.forEach { putAsset(it) } }
+    private fun pressSystemBack() {
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        compose.waitForIdle()
+    }
+    private fun screenshot(name: String) {
+        compose.waitForIdle()
+        android.os.SystemClock.sleep(350) // Let the platform dialog window finish its entrance animation.
+        val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        java.io.File(app.getExternalFilesDir(null), "$name.png").outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        bitmap.recycle()
     }
     private suspend fun awaitComplete() = withTimeout(90_000) {
         while (repo.dao.assets().count { it.state == "Ready" } != 12) delay(300)

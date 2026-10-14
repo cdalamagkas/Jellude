@@ -28,6 +28,7 @@ class JellyfinApi(val client: OkHttpClient, val session: ServerSession) {
         Request.Builder().url(url(path, query)).header("Authorization", auth(session.token))
 
     fun call(path: String, query: Map<String, String> = emptyMap(), method: String = "GET", body: JSONObject? = null): String {
+        require(dev.jellude.core.ServerRequestPolicy.allows(method, path.split('/'))) { "This server operation is blocked. Jellude cannot delete server files." }
         val builder = request(path, query)
         if (method != "GET") builder.method(method,
             if (method == "DELETE") null else (body?.toString() ?: "").toRequestBody("application/json".toMediaType()))

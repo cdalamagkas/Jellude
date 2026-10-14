@@ -46,7 +46,7 @@ class MusicService : MediaLibraryService() {
         val prefs = getSharedPreferences("playback", MODE_PRIVATE)
         val key = "queue-${repo?.session?.namespace}"
         fun saveQueue() {
-            if (player.mediaItemCount == 0) return
+            if (player.mediaItemCount == 0) { prefs.edit().remove(key).apply(); return }
             val ids = JSONArray().apply { (0 until player.mediaItemCount).forEach { put(player.getMediaItemAt(it).mediaId) } }
             prefs.edit().putString(key, JSONObject().put("ids", ids).put("index", player.currentMediaItemIndex)
                 .put("position", player.currentPosition).put("shuffle", player.shuffleModeEnabled).put("repeat", player.repeatMode).toString()).apply()
