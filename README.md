@@ -1,6 +1,6 @@
 # Jellude
 
-<img src="app/src/main/res/drawable-nodpi/jellude_logo.png" width="180" alt="Jellude logo">
+<img src="docs/branding/jellude-social-preview.png" width="360" alt="Jellude logo on a white background">
 
 An Android music player for your Jellyfin server, focused on a verifiable offline library: download collections, see what is missing, and repair incomplete or damaged phone copies.
 

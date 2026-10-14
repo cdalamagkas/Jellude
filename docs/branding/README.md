@@ -17,6 +17,8 @@ Approved artwork is retained unchanged in Android resources:
 
 The full logo resource filenames use underscores (`jellude_logo.png`, `jellude_icon.png`) as required by Android. The source artwork was created and approved in the chat “Name the Jellyfin Music project”; its original generation prompts are retained alongside this file.
 
+`jellude-social-preview.png` is the 1280×640 white-background banner prepared with AI assistance from the full logo. The repository README uses this opaque image so its navy piano keys and lettering remain readable in both light and dark GitHub themes. Android resources remain unchanged.
+
 Launcher layers wrap the approved icon in Android resources with padding and a pale background to accommodate launcher masks. The source PNGs are not redrawn or regenerated. A simplified single-color vector provides the status-bar and themed-launcher silhouette.
 
 Public naming includes the Android app label, in-app branding, media-browser root, notifications, Jellyfin client identity, Gradle project name, and release filenames.
