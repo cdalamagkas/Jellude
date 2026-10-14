@@ -1,5 +1,15 @@
 # Jellude brand assets
 
+## License and modified distributions
+
+The project's own artwork is offered under GPL-3.0-only, to the extent licensable rights apply, alongside its code. See [LICENSE](../../LICENSE), [NOTICE](../../NOTICE), and [third-party provenance](../../THIRD_PARTY_NOTICES.md). This does not relicense third-party names or marks.
+
+The Jellude name and jellyfish/piano identity identify the maintainer's project and releases. Permission to reproduce artwork under GPLv3 does not grant permission to claim maintainer endorsement or distribute a modified app as an official Jellude release. Public distributions of modified apps must use a distinct app name and launcher identity. Preserve historical attribution and notices, and describe the upstream connection accurately (for example, “based on Jellude”). Unmodified source redistributions may preserve the project name and attribution.
+
+This is separate branding/trade-name and origin guidance, not an additional copyright restriction on modifying or redistributing GPL-covered work. It asserts no registration of a trademark and grants no rights in Jellyfin's marks. The GPL copyright permissions remain available, including the right to modify the artwork. Nominative references and accurate attribution are permitted; do not imply affiliation with Jellyfin.
+
+## Original artwork and provenance
+
 Approved artwork is retained unchanged in Android resources:
 
 - `app/src/main/res/drawable-nodpi/jellude_logo.png` — full icon and wordmark, transparent background. Used on a light surface so the approved navy lettering remains legible.

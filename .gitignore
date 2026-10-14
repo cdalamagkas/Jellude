@@ -28,3 +28,5 @@ signing.properties
 secrets.properties
 .DS_Store
 Thumbs.db
+__pycache__/
+*.py[cod]

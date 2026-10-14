@@ -1,0 +1,18 @@
+Jellude
+Copyright (C) 2026 Christos Dalamagkas
+
+Jellude's own source code and project artwork are offered under the GNU General
+Public License version 3 only (SPDX-License-Identifier: GPL-3.0-only), to the extent
+licensable rights apply. See LICENSE for the complete terms. Third-party code and
+assets retain their respective licenses and notices; see THIRD_PARTY_NOTICES.md.
+
+The initial application code and original project artwork were generated using
+AI tools under human direction. See the README AI development disclosure.
+
+Jellude is an independent project. It is not affiliated with, endorsed by, or an
+official client of Jellyfin. Jellyfin's name and marks belong to their respective
+holders. No rights in third-party names or marks are granted here.
+
+Permission to copy project artwork under GPLv3 does not grant permission to imply
+that a modified distribution is an official Jellude release. See
+docs/branding/README.md for separate branding and attribution guidance.
