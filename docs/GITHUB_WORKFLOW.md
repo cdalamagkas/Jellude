@@ -8,7 +8,7 @@ The repository root is the Android Studio project root. The source includes Grad
 
 1. Clone the repository using Android Studio's **Get from Version Control**, Git, or GitHub Desktop. While it is private, authenticate with an account that has access.
 2. Open the cloned root directory in Android Studio.
-3. Use Gradle JVM 21. Install Android SDK platform 35 and Build Tools 36.0.0 when prompted.
+3. Use Gradle JVM 21. Install Android SDK platform 37 and Build Tools 36.0.0 when prompted.
 4. Let Android Studio create the machine-local `local.properties` SDK setting and finish Gradle sync.
 
 ## Everyday changes
