@@ -111,16 +111,19 @@ class MusicService : MediaLibraryService() {
             parentId: String, page: Int, pageSize: Int, params: LibraryParams?): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future {
             val repository = repo ?: return@future LibraryResult.ofItemList(emptyList(), params)
             val all = repository.dao.items()
+            val ready = repository.dao.assets().filter { it.state == "Ready" && repository.file(it.trackId).exists() &&
+                repository.file(it.trackId).length() == it.bytes }.map { it.trackId }.toSet()
+            val available = offlineItemIds(all, ready, repository.dao.members(),
+                all.filter { it.kind == "Playlist" }.flatMap { repository.dao.entries(it.id) })
             val children = when (parentId) {
                 "root" -> listOf(folder("downloaded", "Downloaded"), folder("albums", "Albums"), folder("artists", "Artists"), folder("playlists", "Playlists"), folder("songs", "Songs"))
                 "downloaded" -> {
-                    val ready = repository.dao.assets().filter { it.state == "Ready" && repository.file(it.trackId).exists() }.map { it.trackId }.toSet()
                     all.filter { it.id in ready }.map { media(it) }
                 }
-                "songs" -> all.filter { it.kind == "Audio" && (!app.store.offline || repository.dao.asset(it.id)?.state == "Ready") }.map { media(it) }
+                "songs" -> all.filter { it.kind == "Audio" && (!app.store.offline || it.id in ready) }.map { media(it) }
                 "albums", "artists", "playlists" -> {
                     val kind = when (parentId) { "albums" -> "MusicAlbum"; "artists" -> "MusicArtist"; else -> "Playlist" }
-                    all.filter { it.kind == kind }.map { folder("collection:${it.id}", it.title) }
+                    all.filter { it.kind == kind && (!app.store.offline || it.id in available) }.map { folder("collection:${it.id}", it.title) }
                 }
                 else -> {
                     val id = parentId.removePrefix("collection:")
@@ -131,7 +134,7 @@ class MusicService : MediaLibraryService() {
                         "MusicArtist" -> all.filter { it.kind == "Audio" && id in it.albumArtistIds.split(',') }
                         else -> emptyList()
                     }
-                    tracks.map { media(it) }
+                    tracks.filter { !app.store.offline || it.id in ready }.map { media(it) }
                 }
             }
             LibraryResult.ofItemList(children.drop((page.toLong() * pageSize).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()).take(pageSize), params)

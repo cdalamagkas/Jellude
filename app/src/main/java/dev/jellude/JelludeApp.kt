@@ -49,7 +49,8 @@ class JelludeApp : Application(), coil.ImageLoaderFactory {
         }
         store.save(session)
         if (repository != null) { repository!!.api = JellyfinApi(http, session); return }
-        val database = Room.databaseBuilder(this, LibraryDatabase::class.java, "library-${session.namespace}.db").build()
+        val database = Room.databaseBuilder(this, LibraryDatabase::class.java, "library-${session.namespace}.db")
+            .addMigrations(LibraryDatabase.MIGRATION_1_2).build()
         repository = MusicRepository(this, session, database, JellyfinApi(http, session),
             File(filesDir, "music/${session.namespace}").apply { mkdirs() })
         repository!!.scheduleMaintenance()

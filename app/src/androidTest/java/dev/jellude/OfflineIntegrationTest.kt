@@ -45,6 +45,9 @@ class OfflineIntegrationTest {
         JSONObject().put("Id", "%032x".format(index)).put("Name", "Test song $index").put("Type", "Audio")
             .put("AlbumId", albumId).put("Album", "Test album").put("Artists", JSONArray().put("Test artist"))
             .put("IndexNumber", index).put("RunTimeTicks", 20_000_000)
+            .put("ParentIndexNumber", if (index <= 3) 1 else 2)
+            .put("MediaStreams", JSONArray().put(JSONObject().put("Type", "Audio").put("Codec", "pcm_s16le")
+                .put("BitRate", 128000).put("SampleRate", 8000)))
     }
     @Before fun setup() = runBlocking {
         server = MockWebServer()
@@ -136,6 +139,12 @@ class OfflineIntegrationTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Downloaded: Test album").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText("Downloads").performClick()
         compose.onNodeWithText("12 / 12 tracks verified", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Stop keeping offline").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Local copy", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Keep offline again").assertIsDisplayed()
+        assertEquals(12, repo.dao.assets().count { it.state == "Ready" })
+        repo.repair(null, true)
+        assertEquals(12, repo.dao.assets().count { it.state == "Ready" })
     }
     @Test fun downloadedTrackPlaysOfflineAndAutoBrowserExposesIt() = runBlocking {
         repo.select(repo.dao.item(albumId)!!, false)
@@ -219,8 +228,12 @@ class OfflineIntegrationTest {
         val songs = repo.dao.items().filter { it.kind == "Audio" }.sortedBy { it.number }
         compose.runOnIdle { model.play(songs); model.controller!!.pause() }
         compose.waitUntil(15_000) { model.queue.size == 12 }
-        compose.onNodeWithContentDescription("Lyrics and playback").performClick()
-        compose.onNodeWithContentDescription("Repeat off").performClick()
+        compose.onNodeWithContentDescription("Expand player").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Show lyrics").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Show lyrics").performScrollTo().performClick()
+        compose.onNodeWithText("First line").assertExists()
+        compose.onNodeWithContentDescription("Show cover art").performClick()
+        compose.onNodeWithContentDescription("Repeat off").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Repeat queue").assertIsOn()
         compose.runOnIdle { assertEquals(Player.REPEAT_MODE_ALL, model.controller!!.repeatMode) }
         compose.onNodeWithContentDescription("Repeat queue").performClick()
@@ -232,7 +245,7 @@ class OfflineIntegrationTest {
         compose.onNodeWithContentDescription("Shuffle off").performClick()
         compose.onNodeWithContentDescription("Shuffle on").assertIsOn()
         compose.onNodeWithContentDescription("Shuffle on").performClick()
-        compose.onNodeWithText("View queue (12)").performClick()
+        compose.onNodeWithContentDescription("Playing queue (12)").performScrollTo().performClick()
         compose.onNodeWithText("Now playing", substring = false).assertIsDisplayed()
         compose.onNodeWithText("Next", substring = false).assertIsDisplayed()
         screenshot("playing-queue")
@@ -281,11 +294,54 @@ class OfflineIntegrationTest {
         awaitComplete()
         repo.select(repo.dao.item(playlistId)!!, false)
         repo.release(albumId)
+        assertFalse(repo.dao.selection(albumId)!!.retained)
+        assertTrue(repo.dao.members().any { it.selectionId == albumId })
+        assertTrue(repo.file(tracks[2].getString("Id")).exists())
         repo.cleanUnreferenced()
         assertTrue(repo.file(first).exists())
         assertTrue(repo.file(tracks[1].getString("Id")).exists())
         assertFalse(repo.file(tracks[2].getString("Id")).exists())
         assertEquals(0, mutations.get())
+    }
+    @Test fun offlineCatalogueIncludesOnlyPlayableTracksAndTheirCollections() {
+        val items = listOf(
+            Item("one", "Downloaded", "Audio", albumId = "album", albumArtistIds = "artist"),
+            Item("two", "Online only", "Audio", albumId = "other"),
+            Item("album", "Album", "MusicAlbum"), Item("other", "Other", "MusicAlbum"),
+            Item("artist", "Artist", "MusicArtist"), Item("playlist", "Playlist", "Playlist"))
+        assertEquals(setOf("one", "album", "artist", "playlist"), offlineItemIds(items, setOf("one"), emptyList(),
+            listOf(PlaylistEntry("playlist", "entry", "one", 0))))
+        assertTrue(offlineItemIds(items, emptySet(), emptyList(), emptyList()).isEmpty())
+    }
+    @Test fun migrationPreservesExistingLibraryAndOfflineSelections() = runBlocking {
+        val name = "migration-test.db"
+        app.deleteDatabase(name)
+        val old = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(app.getDatabasePath(name), null)
+        try {
+            val testContext = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context
+            val schema = JSONObject(testContext.assets.open("dev.jellude.data.LibraryDatabase/1.json").bufferedReader().use { it.readText() })
+                .getJSONObject("database")
+            val entities = schema.getJSONArray("entities")
+            for (i in 0 until entities.length()) {
+                val entity = entities.getJSONObject(i)
+                old.execSQL(entity.getString("createSql").replace("\u0024{TABLE_NAME}", entity.getString("tableName")))
+                val indices = entity.getJSONArray("indices")
+                for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql")
+                    .replace("\u0024{TABLE_NAME}", entity.getString("tableName")))
+            }
+            val queries = schema.getJSONArray("setupQueries")
+            for (i in 0 until queries.length()) old.execSQL(queries.getString(i))
+            old.execSQL("INSERT INTO items VALUES ('track', 'Preserved song', 'Audio', '', '', '', 1, 1, 1000, '', '', '')")
+            old.execSQL("INSERT INTO selections VALUES ('track', 'Preserved song', 'Audio', 0, 1, NULL)")
+            old.version = 1
+        } finally { old.close() }
+        val migrated = androidx.room.Room.databaseBuilder(app, LibraryDatabase::class.java, name)
+            .addMigrations(LibraryDatabase.MIGRATION_1_2).build()
+        try {
+            assertEquals("Preserved song", migrated.library().item("track")!!.title)
+            assertEquals("", migrated.library().item("track")!!.codec)
+            assertTrue(migrated.library().selection("track")!!.retained)
+        } finally { migrated.close(); app.deleteDatabase(name) }
     }
     private suspend fun LibraryDao.putAssetsForTest(assets: List<Asset>) { assets.forEach { putAsset(it) } }
     private fun pressSystemBack() {
