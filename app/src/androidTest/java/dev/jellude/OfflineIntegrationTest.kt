@@ -84,7 +84,8 @@ class OfflineIntegrationTest {
                     path.endsWith("/Items") -> {
                         val rows = JSONArray()
                         if (request.requestUrl!!.queryParameter("ParentId") == null) {
-                            rows.put(JSONObject().put("Id", albumId).put("Name", "Test album").put("Type", "MusicAlbum"))
+                            rows.put(JSONObject().put("Id", albumId).put("Name", "Test album").put("Type", "MusicAlbum")
+                                .put("Artists", JSONArray().put("Test artist")))
                             rows.put(JSONObject().put("Id", playlistId).put("Name", "Test playlist").put("Type", "Playlist"))
                         }
                         tracks.forEach(rows::put)
@@ -119,10 +120,10 @@ class OfflineIntegrationTest {
         assertEquals("dev.jellude", app.packageName)
         assertEquals("Jellude", app.applicationInfo.loadLabel(app.packageManager).toString())
         compose.waitUntil(timeoutMillis = 15_000) {
-            try { compose.onAllNodesWithText("Your music").fetchSemanticsNodes().isNotEmpty() }
+            try { compose.onAllNodesWithText("Library").fetchSemanticsNodes().size == 2 }
             catch (_: IllegalStateException) { false }
         }
-        compose.onNodeWithText("Your music").assertIsDisplayed()
+        compose.onAllNodesWithText("Library").assertCountEquals(2)
         compose.onNodeWithText("Test album").assertIsDisplayed()
         compose.onNodeWithContentDescription("Download for offline use: Test album").assertIsDisplayed()
         repo.select(repo.dao.item(albumId)!!, false)
@@ -139,12 +140,38 @@ class OfflineIntegrationTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Downloaded: Test album").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText("Downloads").performClick()
         compose.onNodeWithText("12 / 12 tracks verified", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Stop keeping offline").performClick()
+        compose.onNodeWithContentDescription("Stop keeping offline").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Local copy", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Keep offline again").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Keep offline again").assertIsDisplayed()
         assertEquals(12, repo.dao.assets().count { it.state == "Ready" })
         repo.repair(null, true)
         assertEquals(12, repo.dao.assets().count { it.state == "Ready" })
+    }
+    @Test fun compactLayoutsKeepArtworkAndActionsSeparate() = runBlocking {
+        repo.select(repo.dao.item(albumId)!!, false)
+        awaitComplete()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Downloaded: Test album").fetchSemanticsNodes().size == 1 }
+        compose.onAllNodesWithText("tracks ready", substring = true).assertCountEquals(0)
+        screenshot("compact-library")
+        compose.onNodeWithText("Test album").performClick()
+        val artwork = compose.onNodeWithContentDescription("Cover art: Test album").fetchSemanticsNode().boundsInRoot
+        val artist = compose.onAllNodesWithText("Test artist", substring = false).onFirst().fetchSemanticsNode().boundsInRoot
+        val play = compose.onNodeWithContentDescription("Play Test album").fetchSemanticsNode().boundsInRoot
+        assertEquals(artwork.width, artwork.height, 1f)
+        assertTrue("Artist must be below the artwork", artist.top > artwork.bottom)
+        assertTrue("Playback controls must be below the artist", play.top > artist.bottom)
+        compose.onAllNodesWithText("Ready", substring = true).assertCountEquals(0)
+        screenshot("compact-album")
+        pressSystemBack()
+        compose.onNodeWithText("Downloads").performClick()
+        compose.onNodeWithText("12 tracks ready offline").assertIsDisplayed()
+        val repair = compose.onNodeWithContentDescription("Repair").fetchSemanticsNode().boundsInRoot
+        val refresh = compose.onNodeWithContentDescription("Refresh tracks").fetchSemanticsNode().boundsInRoot
+        val release = compose.onNodeWithContentDescription("Stop keeping offline").fetchSemanticsNode().boundsInRoot
+        assertEquals(repair.top, refresh.top, 1f)
+        assertEquals(repair.top, release.top, 1f)
+        assertTrue(repair.right <= refresh.left && refresh.right <= release.left)
+        screenshot("compact-downloads")
     }
     @Test fun downloadedTrackPlaysOfflineAndAutoBrowserExposesIt() = runBlocking {
         repo.select(repo.dao.item(albumId)!!, false)
@@ -201,17 +228,17 @@ class OfflineIntegrationTest {
         repo.dao.putAsset(Asset(first, "Ready"))
         compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Partially downloaded or pending: Test album").fetchSemanticsNodes().size == 1 }
         compose.onNodeWithText("Test album").performClick()
-        compose.onNodeWithText("Play", substring = false).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Play Test album").assertIsDisplayed()
         pressSystemBack()
-        compose.onNodeWithText("Your music").assertIsDisplayed()
+        compose.onAllNodesWithText("Library").assertCountEquals(2)
         assertEquals(Lifecycle.State.RESUMED, scenario!!.state)
         compose.onNodeWithText("Playlists").performClick()
         compose.onNodeWithContentDescription("Partially downloaded or pending: Test playlist").assertIsDisplayed()
         compose.onNodeWithText("Test playlist").performClick()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
-        compose.onNodeWithText("Play", substring = false).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Play Test playlist").assertIsDisplayed()
         pressSystemBack()
-        compose.onNodeWithText("Your playlists").assertIsDisplayed()
+        compose.onAllNodesWithText("Playlists").assertCountEquals(2)
         // Failure to discover a full collection remains incomplete even if all known tracks are ready.
         repo.dao.putAssetsForTest(tracks.map { Asset(it.getString("Id"), "Ready") })
         repo.dao.putSelection(Selection(albumId, "Test album", "MusicAlbum", false, error = "Discovery failed"))
@@ -325,7 +352,7 @@ class OfflineIntegrationTest {
             for (i in 0 until entities.length()) {
                 val entity = entities.getJSONObject(i)
                 old.execSQL(entity.getString("createSql").replace("\u0024{TABLE_NAME}", entity.getString("tableName")))
-                val indices = entity.getJSONArray("indices")
+                val indices = entity.optJSONArray("indices") ?: JSONArray()
                 for (j in 0 until indices.length()) old.execSQL(indices.getJSONObject(j).getString("createSql")
                     .replace("\u0024{TABLE_NAME}", entity.getString("tableName")))
             }
@@ -352,10 +379,16 @@ class OfflineIntegrationTest {
         compose.waitForIdle()
         android.os.SystemClock.sleep(350) // Let the platform dialog window finish its entrance animation.
         val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        java.io.File(app.getExternalFilesDir(null), "$name.png").outputStream().use {
+        val file = java.io.File(app.getExternalFilesDir(null), "$name.png")
+        file.outputStream().use {
             bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
         bitmap.recycle()
+        // Keep review images after Gradle uninstalls the test app and its external files.
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("cp ${file.absolutePath} /data/local/tmp/jellude-$name.png").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { output -> output.readBytes() }
+            }
     }
     private suspend fun awaitComplete() = withTimeout(90_000) {
         while (repo.dao.assets().count { it.state == "Ready" } != 12) delay(300)

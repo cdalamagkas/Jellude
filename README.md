@@ -28,9 +28,17 @@ AI-generated code can contain bugs, security issues, and incorrect assumptions. 
 Jellude cannot delete music files from your Jellyfin server. It does not offer whole-playlist deletion. Phone-download cleanup is local; removing a playlist entry changes membership only. USB export is outside the project's scope.
 
 <p>
+  <img src="docs/screenshots/jellude-013-library.png" width="260" alt="Library with a compact header and downloaded album, using generated test music">
+  <img src="docs/screenshots/jellude-013-album.png" width="260" alt="Album with square cover art, artist below the cover, icon controls and track download indicators, using generated test music">
+  <img src="docs/screenshots/jellude-013-downloads.png" width="260" alt="Downloads with the ready-track count and repair, refresh and stop-keeping icons in one row, using generated test music">
+</p>
+
+<p>
   <img src="docs/screenshots/jellude-013-now-playing.png" width="260" alt="Now playing with lyrics and repeat-song feedback, using generated test music">
   <img src="docs/screenshots/jellude-013-playing-queue.png" width="260" alt="Playing queue showing current and next tracks, remove actions and Clear queue, using generated test music">
 </p>
+
+The Library, album and Downloads screenshots show the compact layout verified on an Android 17 (API 37) emulator. Test albums use placeholder artwork.
 
 ## Build from source
 
@@ -51,16 +59,18 @@ The project uses AGP 9.4.1, Gradle 9.8.1, Kotlin 2.4.21 and KSP 2.3.12. Compile 
 1. Enter your Jellyfin URL (including any reverse-proxy base path), username and password. Prefer HTTPS and an account with only the download/playlist permissions you need. Wait for catalogue synchronization.
 2. Browse or search Albums, Artists (album artists), Songs, or Playlists. Tap a download icon and choose a snapshot or synchronized collection. Playlists default to synchronized membership.
 3. A downloading symbol means partial, pending, or needing attention; a download check mark means complete according to the local catalogue/verified asset records. Tap the action or open Downloads to inspect it. A failed discovery is never shown as complete.
-4. In Downloads, **Verify & repair** checks phone files and requeues missing or damaged tracks. **Refresh tracks** updates collection membership. Metadata/playlist synchronization is also available in Settings.
+4. In Downloads, **Verify & repair all** checks phone files and requeues missing or damaged tracks. Each item's wrench icon repairs its files, the circular arrows refresh its track list, and the minus-in-a-circle icon stops keeping it offline. Long-press an action icon for its label. Metadata/playlist synchronization is also available in Settings.
 5. Enable **Offline mode** to block the app's server requests. Downloads default to unmetered networks. Original audio playback depends on your device's codec support.
 
 **Stop keeping offline** stops automatic retention/repair for that selection but leaves existing phone copies visible in Downloads as a local, unsynchronized copy. Use **Keep offline again** to resume retention. **Settings → Clean up unused phone downloads** removes only audio no remaining offline selection needs. Tracks shared by another downloaded song/album/artist/playlist are preserved. Uninstalling or clearing the app's storage removes app-managed downloads. Offline browsing shows downloaded tracks and collections containing downloaded tracks; unavailable tracks are hidden inside collections too.
+
+A **Snapshot** keeps the track list saved when you downloaded the item; **Refresh tracks** updates it manually. **Synchronized** collections also refresh their membership during library synchronization.
 
 Tap the bottom player's artwork or title to expand it. Both player sizes have a draggable seek bar. The expanded player shows cover art, elapsed/total/remaining time, and encoding details when supplied by Jellyfin. Its lyrics button lights up when lyrics are available and switches the cover to lyrics; timestamped lyrics follow playback. The queue icon opens the playing queue. Collection pages show cover art, and multi-disc albums have disc headings. Repeat cycles **off → queue → song → off**. Clearing the queue does not remove playlists or downloads and stays cleared after the playback service restarts.
 
 ## Compatibility and current limits
 
-The owner reports successful use of development version 0.1.3 on a **POCO F7 Ultra with Android 16 and Jellyfin Server 12.2**. Automated mock-server integration tests have run on Android 15 and 16 emulators; the latest 0.1.3 regression run passed 19 core tests and 7 Android 16 integration tests. These results do not establish compatibility with every server, phone, format, or proxy. See [compatibility evidence](docs/COMPATIBILITY.md) and [test results](docs/TEST_RESULTS.md).
+The owner reports successful use of development version 0.1.3 on a **POCO F7 Ultra with Android 16 and Jellyfin Server 12.2**. Automated mock-server integration tests have run on Android 15, 16 and 17 emulators. The latest UI regression run passed all 10 integration tests on Android 17 (API 37), including album spacing and Downloads action alignment. These results do not establish compatibility with every server, phone, format, or proxy. See [compatibility evidence](docs/COMPATIBILITY.md) and [test results](docs/TEST_RESULTS.md) for earlier results.
 
 - Long background downloads still depend on Android job quotas and manufacturer battery restrictions. Large-library, reboot, low-space and extended-offline reliability need more physical-device testing.
 - Real Android Auto driving UI, voice control and reconnection need car/head-unit validation.
