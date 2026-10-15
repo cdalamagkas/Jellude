@@ -190,6 +190,8 @@ fun MusicApp(model: MusicModel) {
     var newPlaylist by remember { mutableStateOf(false) }
     val ready = assets.filter { it.state == "Ready" }.map { it.trackId }.toSet()
     val assetMap = assets.associateBy { it.trackId }
+    val available = remember(catalogue, ready, members, entries) { offlineItemIds(catalogue, ready, members, entries) }
+    val downloads = selections.filter { !model.offline || it.id in available }
     val downloadStates = remember(catalogue, assets, selections, members, entries) {
         downloadStates(catalogue, assets, selections, members, entries)
     }
@@ -200,20 +202,7 @@ fun MusicApp(model: MusicModel) {
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, bottomBar = {
         Column {
             catalogue.find { it.id == model.playingId }?.let { item ->
-                Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).clickable { lyrics = true }) {
-                            Text(item.title, maxLines = 1, fontWeight = FontWeight.Bold)
-                            Text(item.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                        }
-                        IconButton(onClick = { lyrics = true }) { Icon(Icons.Default.Lyrics, "Lyrics and playback") }
-                        IconButton(onClick = { showQueue = true }) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Playing queue") }
-                        IconButton(onClick = { model.controller?.let { if (it.isPlaying) it.pause() else it.play() } }) {
-                            Icon(if (model.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause")
-                        }
-                        IconButton(onClick = { model.controller?.seekToNextMediaItem() }) { Icon(Icons.Default.SkipNext, "Next track") }
-                    }
-                }
+                MiniPlayer(model, item) { lyrics = true }
             }
             NavigationBar {
                 val labels = listOf("Library", "Downloads", "Playlists", "Settings")
@@ -241,28 +230,34 @@ fun MusicApp(model: MusicModel) {
             if (model.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (tab == 3) {
                 Settings(model, repo, assets)
-            } else if (tab == 1) {
+            } else if (tab == 1 && detail == null) {
                 Row {
                     TextButton(enabled = !model.busy, onClick = { model.action { repo.repair(null, true) } }) { Text("Verify & repair all") }
                 }
-                if (selections.isEmpty()) Empty("Keep music offline", "Choose a song, album, artist, or playlist in your library and tap download.")
+                if (downloads.isEmpty()) Empty("Keep music offline", "Choose a song, album, artist, or playlist in your library and tap download.")
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(selections, key = { it.id }) { s ->
+                    items(downloads, key = { it.id }) { s ->
                         val expected = members.filter { it.selectionId == s.id }.map { it.trackId }.toSet()
                         val count = expected.count { it in ready }
-                        Card(Modifier.fillMaxWidth()) {
+                        Card(Modifier.fillMaxWidth().clickable {
+                            catalogue.find { it.id == s.id }?.let { item ->
+                                if (item.kind == "Audio") model.play(listOf(item)) else detail = item
+                            }
+                        }) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(s.title, style = MaterialTheme.typography.titleMedium)
-                                Text(if (s.refreshedAt == 0L) "Discovering tracks · not complete" else "$count / ${expected.size} tracks verified · ${if (s.keepSynced) "Synchronized" else "Snapshot"}")
+                                Text(if (!s.retained) "$count tracks on this phone · Local copy · Not synchronized"
+                                    else if (s.refreshedAt == 0L) "Discovering tracks · not complete" else "$count / ${expected.size} tracks verified · ${if (s.keepSynced) "Synchronized" else "Snapshot"}")
                                 val updates = expected.count { assetMap[it]?.state == "Ready" && assetMap[it]?.transferState?.isNotBlank() == true }
                                 if (updates > 0) Text("$updates audio updates pending or needing attention")
                                 s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                                Row {
+                                if (s.retained) Column {
                                     TextButton(enabled = !model.busy, onClick = { model.action { repo.repair(s.id, true) } }) { Text("Repair") }
                                     TextButton(enabled = !model.busy && !model.offline, onClick = { model.action { repo.refreshSelection(s); repo.repair(s.id, false) } }) { Text("Refresh tracks") }
                                     TextButton(onClick = { model.action { repo.release(s.id) }; model.message = "Automatic offline keeping stopped. Existing phone downloads remain until cleanup." }) { Text("Stop keeping offline") }
                                 }
-                                expected.filter { it !in ready }.forEach { id ->
+                                else TextButton(enabled = !model.busy && !model.offline, onClick = { catalogue.find { it.id == s.id }?.let { item -> model.action { repo.select(item, s.kind == "Playlist") } } }) { Text("Keep offline again") }
+                                expected.filter { s.retained && !model.offline && it !in ready }.forEach { id ->
                                     Text("${catalogue.find { it.id == id }?.title ?: id}: ${assetMap[id]?.error ?: assetMap[id]?.state ?: "Queued"}",
                                         style = MaterialTheme.typography.bodySmall)
                                 }
@@ -279,8 +274,10 @@ fun MusicApp(model: MusicModel) {
                         }
                     } else TextButton(enabled = !model.offline, onClick = { newPlaylist = true }) { Text("Create playlist") }
                     val list = catalogue.filter { it.kind == if (tab == 2) "Playlist" else filter }
+                        .filter { !model.offline || it.id in available }
                         .filter { query.isBlank() || it.title.contains(query, true) || it.artist.contains(query, true) }
-                    if (list.isEmpty()) Empty("Nothing here yet", "Synchronize your Jellyfin library using the refresh button.")
+                    if (list.isEmpty()) Empty(if (model.offline) "No downloaded music here" else "Nothing here yet",
+                        if (model.offline) "Download music while online to make it available here." else "Synchronize your Jellyfin library using the refresh button.")
                     LazyColumn {
                         items(list, key = { it.id }) { item ->
                             MusicRow(item, assetMap[item.id], downloadStates[item.id] ?: DownloadState.NONE, { if (item.kind == "Audio") {
@@ -300,14 +297,31 @@ fun MusicApp(model: MusicModel) {
                             .mapNotNull { e -> catalogue.find { it.id == e.trackId } }
                         "MusicAlbum" -> catalogue.filter { it.kind == "Audio" && it.albumId == item.id }.sortedWith(compareBy({ it.disc }, { it.number }))
                         else -> catalogue.filter { it.kind == "Audio" && item.id in it.albumArtistIds.split(',') }.sortedBy { it.album }
-                    }
-                    Row {
-                        Button(onClick = { model.play(tracks.filter { !model.offline || it.id in ready }) }) { Text("Play") }
-                        TextButton(onClick = { selection = item }) { Text((downloadStates[item.id] ?: DownloadState.NONE).label) }
-                    }
-                    if (item.kind == "Playlist") PlaylistTools(model, item, catalogue, entries.filter { it.playlistId == item.id }, edits.filter { it.playlistId == item.id && it.status != "Done" })
+                    }.let { current ->
+                        val stopped = selections.any { it.id == item.id && !it.retained }
+                        if (model.offline || stopped) {
+                            val localMembers = members.filter { it.selectionId == item.id && it.trackId in ready }.map { it.trackId }.toSet()
+                            current + catalogue.filter { it.kind == "Audio" && it.id in localMembers && current.none { track -> track.id == it.id } }
+                        } else current
+                    }.filter { !model.offline || it.id in ready }
+                    val multiDisc = item.kind == "MusicAlbum" && catalogue.filter { it.kind == "Audio" && it.albumId == item.id }
+                        .map { it.disc.coerceAtLeast(1) }.distinct().size > 1
                     LazyColumn {
-                        itemsIndexed(tracks) { index, track -> MusicRow(track, assetMap[track.id], downloadStates[track.id] ?: DownloadState.NONE,
+                        item {
+                            Artwork(model, item, Modifier.fillMaxWidth().heightIn(max = 280.dp).aspectRatio(1f))
+                            Text(item.artist, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
+                            Row {
+                                Button(enabled = tracks.isNotEmpty(), onClick = { model.play(tracks) }) { Text("Play") }
+                                TextButton(onClick = { selection = item }) { Text((downloadStates[item.id] ?: DownloadState.NONE).label) }
+                            }
+                            if (item.kind == "Playlist") PlaylistTools(model, item, catalogue, entries.filter { it.playlistId == item.id }, edits.filter { it.playlistId == item.id && it.status != "Done" })
+                        }
+                        itemsIndexed(tracks) { index, track ->
+                            if (multiDisc &&
+                                (index == 0 || tracks[index - 1].disc.coerceAtLeast(1) != track.disc.coerceAtLeast(1))) {
+                                Text("Disc ${track.disc.coerceAtLeast(1)}", Modifier.padding(top = 20.dp, bottom = 8.dp), style = MaterialTheme.typography.titleMedium)
+                            }
+                            MusicRow(track, assetMap[track.id], downloadStates[track.id] ?: DownloadState.NONE,
                             { if (!model.offline || track.id in ready) model.play(tracks.filter { !model.offline || it.id in ready },
                                 tracks.take(index).count { !model.offline || it.id in ready }) else model.message = "This track is not downloaded" }, { selection = track }) }
                     }
@@ -317,7 +331,7 @@ fun MusicApp(model: MusicModel) {
     }
     selection?.let { item ->
         var synced by remember(item.id) { mutableStateOf(item.kind == "Playlist") }
-        val existing = selections.find { it.id == item.id }
+        val existing = selections.find { it.id == item.id && it.retained }
         AlertDialog(onDismissRequest = { selection = null }, title = { Text("Offline download: ${item.title}") },
             text = { Column { Text("Original audio files will be stored on this phone.")
                 Text((downloadStates[item.id] ?: DownloadState.NONE).label)
@@ -480,54 +494,7 @@ private fun projectedEntries(entries: List<PlaylistEntry>, edit: PlaylistEdit?):
         } }, confirmButton = { TextButton(onClick = { dialog = "" }) { Text("Close") } })
 }
 
-@Composable private fun NowPlaying(model: MusicModel, track: Item?, dismiss: () -> Unit, openQueue: () -> Unit) {
-    var lines by remember(track?.id) { mutableStateOf<List<Lyric>>(emptyList()) }
-    var status by remember(track?.id) { mutableStateOf("Loading lyrics…") }
-    LaunchedEffect(track?.id) {
-        track ?: return@LaunchedEffect
-        val json = withContext(Dispatchers.IO) {
-            model.repo!!.dao.lyrics(track.id)?.json ?: if (!model.offline) try { model.repo!!.refreshLyrics(track.id) } catch (_: Exception) { null } else null
-        }
-        lines = json?.let { data ->
-            val lyrics = JSONObject(data).optJSONArray("Lyrics")
-            (0 until (lyrics?.length() ?: 0)).map { index ->
-                val row = lyrics!!.getJSONObject(index)
-                Lyric(row.optString("Text"), if (row.has("Start") && !row.isNull("Start")) row.getLong("Start") / 10_000 else null)
-            }
-        }.orEmpty()
-        status = if (lines.isEmpty()) "No lyrics available${if (model.offline) " offline" else " on Jellyfin"}" else ""
-    }
-    val active = Lyrics.activeLine(lines, model.position)
-    AlertDialog(onDismissRequest = dismiss, title = { Text(track?.title ?: "Now playing") }, text = {
-        Column {
-            Text(track?.artist.orEmpty())
-            Slider(value = model.position.toFloat().coerceIn(0f, model.duration.toFloat().coerceAtLeast(1f)),
-                onValueChange = { model.controller?.seekTo(it.toLong()) }, valueRange = 0f..model.duration.toFloat().coerceAtLeast(1f))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                IconToggleButton(checked = model.shuffle, onCheckedChange = { model.toggleShuffle() }) { Icon(Icons.Default.Shuffle, if (model.shuffle) "Shuffle on" else "Shuffle off") }
-                IconButton(onClick = { model.controller?.seekToPreviousMediaItem() }) { Icon(Icons.Default.SkipPrevious, "Previous") }
-                IconButton(onClick = { model.controller?.let { if (it.isPlaying) it.pause() else it.play() } }) { Icon(if (model.playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Play or pause") }
-                IconButton(onClick = { model.controller?.seekToNextMediaItem() }) { Icon(Icons.Default.SkipNext, "Next") }
-                IconToggleButton(checked = model.repeatMode != Player.REPEAT_MODE_OFF, onCheckedChange = { model.cycleRepeat() }) {
-                    Icon(if (model.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, repeatLabel(model.repeatMode))
-                }
-            }
-            Text(repeatLabel(model.repeatMode), style = MaterialTheme.typography.labelMedium)
-            val nextTitle = if (model.repeatMode == Player.REPEAT_MODE_ONE) track?.title else model.queue.find { it.index == model.nextIndex }?.title
-            Text("Next: ${nextTitle ?: "End of queue"}", maxLines = 2)
-            TextButton(onClick = openQueue) { Text("View queue (${model.queue.size})") }
-            if (status.isNotEmpty()) Text(status)
-            LazyColumn(Modifier.heightIn(max = 330.dp)) {
-                itemsIndexed(lines) { index, line -> Text(line.text, Modifier.padding(vertical = 7.dp).clickable(enabled = line.startMs != null) {
-                    line.startMs?.let { model.controller?.seekTo(it) }
-                }, color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal) }
-            }
-        }
-    }, confirmButton = { TextButton(onClick = dismiss) { Text("Close") } })
-}
-
-private fun repeatLabel(mode: Int) = when (mode) {
+internal fun repeatLabel(mode: Int) = when (mode) {
     Player.REPEAT_MODE_ALL -> "Repeat queue"
     Player.REPEAT_MODE_ONE -> "Repeat song"
     else -> "Repeat off"

@@ -6,11 +6,23 @@ enum class DownloadState(val label: String) {
     COMPLETE("Downloaded")
 }
 
+/** Collections are browsable offline when at least one of their tracks is playable. */
+fun offlineItemIds(items: List<Item>, ready: Set<String>, members: List<Member>, entries: List<PlaylistEntry>): Set<String> {
+    val visible = ready.toMutableSet()
+    items.filter { it.kind == "Audio" && it.id in ready }.forEach {
+        if (it.albumId.isNotBlank()) visible.add(it.albumId)
+        visible.addAll(it.albumArtistIds.split(',').filter(String::isNotBlank))
+    }
+    members.filter { it.trackId in ready }.forEach { visible.add(it.selectionId) }
+    entries.filter { it.trackId in ready }.forEach { visible.add(it.playlistId) }
+    return visible
+}
+
 /** A failed discovery must never appear complete, even if its previous snapshot is ready. */
 fun downloadStates(items: List<Item>, assets: List<Asset>, selections: List<Selection>,
     members: List<Member>, entries: List<PlaylistEntry>): Map<String, DownloadState> {
     val assetMap = assets.associateBy { it.trackId }
-    val selectionMap = selections.associateBy { it.id }
+    val selectionMap = selections.filter { it.retained }.associateBy { it.id }
     val memberMap = members.groupBy { it.selectionId }
     val albums = items.filter { it.kind == "Audio" }.groupBy { it.albumId }
     val artists = mutableMapOf<String, MutableSet<String>>()

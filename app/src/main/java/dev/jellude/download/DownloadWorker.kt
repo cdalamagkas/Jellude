@@ -31,7 +31,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         if (repo.session.namespace != inputData.getString("namespace")) return@withContext Result.failure()
         if (app.store.offline) return@withContext Result.retry()
         val id = inputData.getString("track") ?: return@withContext Result.failure()
-        if (repo.dao.members().none { it.trackId == id }) return@withContext Result.success()
+        val retained = repo.dao.selections().filter { it.retained }.map { it.id }.toSet()
+        if (repo.dao.members().none { it.trackId == id && it.selectionId in retained }) return@withContext Result.success()
         val item = repo.dao.item(id) ?: return@withContext Result.failure()
         val previous = repo.dao.asset(id)
         val hasPrevious = previous?.state == "Ready" && repo.file(id).exists() && repo.file(id).length() == previous.bytes

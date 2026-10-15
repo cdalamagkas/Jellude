@@ -65,20 +65,20 @@ class JellyfinApi(val client: OkHttpClient, val session: ServerSession) {
     }
     fun catalogue(): List<Item> = pages("Users/${session.userId}/Items", mapOf(
         "Recursive" to "true", "IncludeItemTypes" to "Audio,MusicAlbum,MusicArtist,Playlist",
-        "Fields" to "MediaSources", "SortBy" to "SortName", "SortOrder" to "Ascending"
+        "Fields" to "MediaSources,MediaStreams", "SortBy" to "SortName", "SortOrder" to "Ascending"
     )).map(::item).distinctBy { it.id }
 
     fun collection(selection: Selection): List<Item> = when (selection.kind) {
         "Audio" -> listOf(item(JSONObject(call("Users/${session.userId}/Items/${selection.id}"))))
         "Playlist" -> playlist(selection.id).second
         else -> pages("Users/${session.userId}/Items", mapOf(
-            "Recursive" to "true", "IncludeItemTypes" to "Audio", "Fields" to "MediaSources",
+            "Recursive" to "true", "IncludeItemTypes" to "Audio", "Fields" to "MediaSources,MediaStreams",
             "SortBy" to "ParentIndexNumber,IndexNumber,SortName", "SortOrder" to "Ascending"
         ) + if (selection.kind == "MusicArtist") mapOf("AlbumArtistIds" to selection.id)
             else mapOf("ParentId" to selection.id)).map(::item).distinctBy { it.id }
     }
     fun playlist(id: String): Pair<List<PlaylistEntry>, List<Item>> {
-        val rows = pages("Playlists/$id/Items", mapOf("UserId" to session.userId, "Fields" to "MediaSources"))
+        val rows = pages("Playlists/$id/Items", mapOf("UserId" to session.userId, "Fields" to "MediaSources,MediaStreams"))
         val entries = rows.mapIndexed { index, row -> PlaylistEntry(id, row.getString("PlaylistItemId"), row.getString("Id"), index) }
         return entries to rows.map(::item)
     }
@@ -88,13 +88,17 @@ class JellyfinApi(val client: OkHttpClient, val session: ServerSession) {
     fun item(json: JSONObject): Item {
         val artists = json.optJSONArray("Artists") ?: JSONArray()
         val media = json.optJSONArray("MediaSources")?.optJSONObject(0)
+        val streams = media?.optJSONArray("MediaStreams") ?: json.optJSONArray("MediaStreams")
+        val audio = (0 until (streams?.length() ?: 0)).mapNotNull { streams?.optJSONObject(it) }
+            .firstOrNull { it.optString("Type") == "Audio" }
         return Item(json.getString("Id"), json.optString("Name", "Untitled"), json.optString("Type", "Audio"),
             (0 until artists.length()).joinToString(", ") { artists.getString(it) }, json.optString("Album"),
             json.optString("AlbumId"), json.optInt("ParentIndexNumber"), json.optInt("IndexNumber"),
             json.optLong("RunTimeTicks") / 10_000, json.optJSONObject("ImageTags")?.optString("Primary").orEmpty(),
             media?.optString("ETag").orEmpty(), json.optJSONArray("AlbumArtists")?.let { rows ->
                 (0 until rows.length()).mapNotNull { rows.optJSONObject(it)?.optString("Id") }.joinToString(",")
-            }.orEmpty())
+            }.orEmpty(), audio?.optString("Codec").orEmpty(), audio?.optInt("BitRate") ?: 0,
+            audio?.optInt("SampleRate") ?: 0)
     }
 
     companion object {

@@ -40,11 +40,14 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
             val (entries, tracks) = api.playlist(playlist.id)
             dao.replaceEntries(playlist.id, entries, tracks)
         }
-        for (selection in dao.selections().filter { it.keepSynced }) refreshSelection(selection)
+        for (selection in dao.selections().filter { it.retained && it.keepSynced }) refreshSelection(selection)
         // Metadata refresh has no dependency on audio re-downloads.
         for (asset in dao.assets().filter { it.state == "Ready" }) {
             try { refreshLyrics(asset.trackId) } catch (_: Exception) { /* Preserve existing lyrics. */ }
             try { cacheArtwork(asset.trackId) } catch (_: Exception) { /* Preserve existing artwork. */ }
+        }
+        for (selection in dao.selections()) {
+            try { cacheArtwork(selection.id) } catch (_: Exception) { /* Preserve existing artwork. */ }
         }
         syncEdits()
         repair(null, deep = false)
@@ -53,18 +56,22 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
     suspend fun select(item: Item, keepSynced: Boolean) = withContext(Dispatchers.IO) {
         val selection = Selection(item.id, item.title, item.kind, keepSynced)
         dao.putSelection(selection)
-        try { refreshSelection(selection); repair(item.id, false) }
+        try {
+            refreshSelection(selection); repair(item.id, false)
+            try { cacheArtwork(item.id) } catch (_: Exception) { /* Artwork does not block audio. */ }
+        }
         catch (e: Exception) { dao.putSelection(selection.copy(error = e.message ?: "Could not discover tracks")); throw e }
     }
     suspend fun refreshSelection(selection: Selection) = selectionMutex.withLock { withContext(Dispatchers.IO) {
-        if (dao.selection(selection.id) == null) return@withContext
+        if (dao.selection(selection.id)?.retained != true) return@withContext
         try { dao.replaceMembers(selection, api.collection(selection)) }
         catch (e: Exception) {
             dao.putSelection(selection.copy(error = e.message ?: "Refresh failed")); throw e
         }
     } }
     suspend fun repair(selectionId: String?, deep: Boolean) = withContext(Dispatchers.IO) {
-        val ids = dao.members().filter { selectionId == null || it.selectionId == selectionId }.map { it.trackId }.toSet()
+        val retained = dao.selections().filter { it.retained }.map { it.id }.toSet()
+        val ids = dao.members().filter { it.selectionId in retained && (selectionId == null || it.selectionId == selectionId) }.map { it.trackId }.toSet()
         for (id in ids) {
             val asset = dao.asset(id)
             val source = dao.item(id)?.sourceTag.orEmpty()
@@ -94,12 +101,13 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
         repair(null, false)
     }
     suspend fun release(selectionId: String) = selectionMutex.withLock { database.withTransaction {
-        dao.clearMembers(selectionId); dao.deleteSelection(selectionId)
+        dao.selection(selectionId)?.let { dao.putSelection(it.copy(retained = false, keepSynced = false, error = null)) }
         // Keep unreferenced verified files until the user explicitly cleans them up.
     } }
     suspend fun cleanUnreferenced() = withContext(Dispatchers.IO) {
         selectionMutex.withLock {
-            val required = dao.members().map { it.trackId }.toSet()
+            val retained = dao.selections().filter { it.retained }.map { it.id }.toSet()
+            val required = dao.members().filter { it.selectionId in retained }.map { it.trackId }.toSet()
             for (asset in dao.assets().filter { it.trackId !in required && it.state !in listOf("Downloading", "Verifying") &&
                 it.transferState !in listOf("Downloading", "Verifying") }) {
                 val audio = file(asset.trackId)
@@ -107,6 +115,12 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
                 check(!audio.exists() || audio.delete()) { "Could not remove a phone download. Retry cleanup." }
                 check(!temporary.exists() || temporary.delete()) { "Could not remove a temporary phone download. Retry cleanup." }
                 dao.putAsset(asset.copy(state = "Not downloaded", bytes = 0, hash = "", transferState = "", error = null))
+            }
+            val ready = dao.assets().filter { it.state == "Ready" }.map { it.trackId }.toSet()
+            for (selection in dao.selections().filter { !it.retained }) {
+                if (dao.members().none { it.selectionId == selection.id && it.trackId in ready }) {
+                    dao.clearMembers(selection.id); dao.deleteSelection(selection.id)
+                }
             }
         }
     }
@@ -188,7 +202,7 @@ class MusicRepository(val context: Context, val session: ServerSession, val data
                     val (entries, tracks) = api.playlist(edit.playlistId)
                     dao.replaceEntries(edit.playlistId, entries, tracks)
                     if (edit.operation == "Rename") dao.item(edit.playlistId)?.let { dao.putItems(listOf(it.copy(title = edit.value))) }
-                    dao.selection(edit.playlistId)?.takeIf { it.keepSynced }?.let { refreshSelection(it); repair(it.id, false) }
+                    dao.selection(edit.playlistId)?.takeIf { it.retained && it.keepSynced }?.let { refreshSelection(it); repair(it.id, false) }
                 }
             } catch (e: Exception) {
                 dao.putEdit(edit.copy(status = "Needs review", error = "The server may have applied this edit. Refresh and inspect before discarding it."))

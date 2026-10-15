@@ -4,6 +4,11 @@ Dates below record development milestones. These entries are not binary-release 
 
 ## Unreleased
 
+- Offline library and Android Auto browsing hide unavailable music and empty collections.
+- Stopped offline selections remain visible as local, unsynchronized copies until cleanup removes their files.
+- Expanded artwork player with elapsed/total/remaining time, encoding details, compact queue/lyrics buttons, and scrolling timed lyrics; artwork and seeking in the mini player.
+- Collection cover headers and disc sections for multi-disc albums.
+- Room v1 → v2 migration preserves existing records while adding retention state and audio format metadata.
 - Public-facing documentation, AI development disclosure, GPLv3 licensing, privacy/security policies, contribution and issue/PR templates.
 - Dependency inventory and attribution, branding guidance, release/publication checklists.
 - GitHub Actions pinned to commit SHAs; checkout credentials are not persisted. Dependabot configuration added.

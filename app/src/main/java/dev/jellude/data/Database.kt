@@ -16,12 +16,16 @@ data class Item(
     val durationMs: Long = 0,
     val imageTag: String = "",
     val sourceTag: String = "",
-    val albumArtistIds: String = ""
+    val albumArtistIds: String = "",
+    @ColumnInfo(defaultValue = "''") val codec: String = "",
+    @ColumnInfo(defaultValue = "0") val bitrate: Int = 0,
+    @ColumnInfo(defaultValue = "0") val sampleRate: Int = 0
 )
 
 @Entity(tableName = "selections")
 data class Selection(@PrimaryKey val id: String, val title: String, val kind: String,
-    val keepSynced: Boolean, val refreshedAt: Long = 0, val error: String? = null)
+    val keepSynced: Boolean, val refreshedAt: Long = 0, val error: String? = null,
+    @ColumnInfo(defaultValue = "1") val retained: Boolean = true)
 
 @Entity(tableName = "members", primaryKeys = ["selectionId", "trackId"],
     indices = [Index("trackId")])
@@ -85,5 +89,17 @@ interface LibraryDao {
 }
 
 @Database(entities = [Item::class, Selection::class, Member::class, Asset::class,
-    StoredLyrics::class, PlaylistEntry::class, PlaylistEdit::class], version = 1, exportSchema = true)
-abstract class LibraryDatabase : RoomDatabase() { abstract fun library(): LibraryDao }
+    StoredLyrics::class, PlaylistEntry::class, PlaylistEdit::class], version = 2, exportSchema = true)
+abstract class LibraryDatabase : RoomDatabase() {
+    abstract fun library(): LibraryDao
+    companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE items ADD COLUMN codec TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE items ADD COLUMN bitrate INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE items ADD COLUMN sampleRate INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE selections ADD COLUMN retained INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+    }
+}

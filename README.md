@@ -54,9 +54,9 @@ The project uses AGP 9.3.1, Gradle 9.5.0, Kotlin 2.4.21 and KSP 2.3.12. Compile/
 4. In Downloads, **Verify & repair** checks phone files and requeues missing or damaged tracks. **Refresh tracks** updates collection membership. Metadata/playlist synchronization is also available in Settings.
 5. Enable **Offline mode** to block the app's server requests. Downloads default to unmetered networks. Original audio playback depends on your device's codec support.
 
-**Stop keeping offline** stops automatic retention/repair for that selection but leaves existing phone copies. **Settings → Clean up unused phone downloads** removes only audio no remaining offline selection needs. Tracks shared by another downloaded song/album/artist/playlist are preserved. Uninstalling or clearing the app's storage removes app-managed downloads.
+**Stop keeping offline** stops automatic retention/repair for that selection but leaves existing phone copies visible in Downloads as a local, unsynchronized copy. Use **Keep offline again** to resume retention. **Settings → Clean up unused phone downloads** removes only audio no remaining offline selection needs. Tracks shared by another downloaded song/album/artist/playlist are preserved. Uninstalling or clearing the app's storage removes app-managed downloads. Offline browsing shows downloaded tracks and collections containing downloaded tracks; unavailable tracks are hidden inside collections too.
 
-Tap the bottom player for playback and lyrics, or its queue icon for the playing queue. Repeat cycles **off → queue → song → off**. Clearing the queue does not remove playlists or downloads and stays cleared after the playback service restarts.
+Tap the bottom player's artwork or title to expand it. Both player sizes have a draggable seek bar. The expanded player shows cover art, elapsed/total/remaining time, and encoding details when supplied by Jellyfin. Its lyrics button lights up when lyrics are available and switches the cover to lyrics; timestamped lyrics follow playback. The queue icon opens the playing queue. Collection pages show cover art, and multi-disc albums have disc headings. Repeat cycles **off → queue → song → off**. Clearing the queue does not remove playlists or downloads and stays cleared after the playback service restarts.
 
 ## Compatibility and current limits
 
@@ -67,7 +67,7 @@ The owner reports successful use of development version 0.1.3 on a **POCO F7 Ult
 - Original-format downloads only; no transcoded downloads or conversion.
 - One outstanding edit per playlist; no automatic three-way merge or offline playlist creation. Concurrent server edits can still race a mutation.
 - Account switching/sign-out with local-retention controls is unfinished. No broad multi-account support is claimed.
-- First Room schema only; future changes must provide explicit migrations.
+- Room schema updates use explicit migrations to preserve existing library and download records.
 
 See the [roadmap](docs/ROADMAP.md), [architecture](docs/ARCHITECTURE.md), and [release policy](docs/RELEASING.md).
 
