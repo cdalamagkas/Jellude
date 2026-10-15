@@ -27,6 +27,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -213,16 +215,16 @@ fun MusicApp(model: MusicModel) {
         }
     }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().padding(horizontal = 18.dp)) {
-            Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Image(painterResource(R.drawable.jellude_icon), stringResource(R.string.app_name), Modifier.size(28.dp))
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Image(painterResource(R.drawable.jellude_icon), null, Modifier.size(26.dp))
-                        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Text(detail?.title ?: listOf("Your music", "Available anywhere", "Your playlists", "Settings")[tab],
-                        style = MaterialTheme.typography.headlineMedium, maxLines = 2)
-                    Text(if (model.offline) "Offline mode · ${ready.size} tracks ready" else "${ready.size} tracks ready offline",
+                    Text(detail?.title ?: listOf("Library", "Downloads", "Playlists", "Settings")[tab],
+                        style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (tab == 1 && detail == null) Text(
+                        if (model.offline) "Offline mode · ${ready.size} tracks ready" else "${ready.size} tracks ready offline",
                         style = MaterialTheme.typography.bodySmall)
+                    else if (model.offline) Text("Offline mode", style = MaterialTheme.typography.bodySmall)
                 }
                 if (detail != null) IconButton(onClick = { detail = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
                 else IconButton(enabled = !model.busy && !model.offline, onClick = { model.action { repo.sync() } }) { Icon(Icons.Default.Sync, "Synchronize library") }
@@ -251,12 +253,12 @@ fun MusicApp(model: MusicModel) {
                                 val updates = expected.count { assetMap[it]?.state == "Ready" && assetMap[it]?.transferState?.isNotBlank() == true }
                                 if (updates > 0) Text("$updates audio updates pending or needing attention")
                                 s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                                if (s.retained) Column {
-                                    TextButton(enabled = !model.busy, onClick = { model.action { repo.repair(s.id, true) } }) { Text("Repair") }
-                                    TextButton(enabled = !model.busy && !model.offline, onClick = { model.action { repo.refreshSelection(s); repo.repair(s.id, false) } }) { Text("Refresh tracks") }
-                                    TextButton(onClick = { model.action { repo.release(s.id) }; model.message = "Automatic offline keeping stopped. Existing phone downloads remain until cleanup." }) { Text("Stop keeping offline") }
+                                if (s.retained) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    ActionIcon("Repair", Icons.Default.Build, enabled = !model.busy) { model.action { repo.repair(s.id, true) } }
+                                    ActionIcon("Refresh tracks", Icons.Default.Sync, enabled = !model.busy && !model.offline) { model.action { repo.refreshSelection(s); repo.repair(s.id, false) } }
+                                    ActionIcon("Stop keeping offline", Icons.Default.RemoveCircleOutline) { model.action { repo.release(s.id) }; model.message = "Automatic offline keeping stopped. Existing phone downloads remain until cleanup." }
                                 }
-                                else TextButton(enabled = !model.busy && !model.offline, onClick = { catalogue.find { it.id == s.id }?.let { item -> model.action { repo.select(item, s.kind == "Playlist") } } }) { Text("Keep offline again") }
+                                else ActionIcon("Keep offline again", Icons.Default.Download, enabled = !model.busy && !model.offline) { catalogue.find { it.id == s.id }?.let { item -> model.action { repo.select(item, s.kind == "Playlist") } } }
                                 expected.filter { s.retained && !model.offline && it !in ready }.forEach { id ->
                                     Text("${catalogue.find { it.id == id }?.title ?: id}: ${assetMap[id]?.error ?: assetMap[id]?.state ?: "Queued"}",
                                         style = MaterialTheme.typography.bodySmall)
@@ -308,11 +310,18 @@ fun MusicApp(model: MusicModel) {
                         .map { it.disc.coerceAtLeast(1) }.distinct().size > 1
                     LazyColumn {
                         item {
-                            Artwork(model, item, Modifier.fillMaxWidth().heightIn(max = 280.dp).aspectRatio(1f))
-                            Text(item.artist, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
-                            Row {
-                                Button(enabled = tracks.isNotEmpty(), onClick = { model.play(tracks) }) { Text("Play") }
-                                TextButton(onClick = { selection = item }) { Text((downloadStates[item.id] ?: DownloadState.NONE).label) }
+                            Column(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Artwork(model, item, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f))
+                                }
+                                if (item.artist.isNotBlank()) Text(item.artist, style = MaterialTheme.typography.titleMedium)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilledIconButton(enabled = tracks.isNotEmpty(), onClick = { model.play(tracks) }, modifier = Modifier.size(48.dp)) {
+                                        Icon(Icons.Default.PlayArrow, "Play ${item.title}")
+                                    }
+                                    val state = downloadStates[item.id] ?: DownloadState.NONE
+                                    ActionIcon("${state.label}: ${item.title}", downloadIcon(state)) { selection = item }
+                                }
                             }
                             if (item.kind == "Playlist") PlaylistTools(model, item, catalogue, entries.filter { it.playlistId == item.id }, edits.filter { it.playlistId == item.id && it.status != "Done" })
                         }
@@ -378,21 +387,41 @@ fun MusicApp(model: MusicModel) {
         .data(repo.api.url("Items/${item.albumId.ifBlank { item.id }}/Images/Primary", mapOf("MaxWidth" to "150", "Tag" to item.imageTag)))
         .addHeader("Authorization", JellyfinApi.auth(repo.api.session.token)).build() else null
     ListItem(modifier = Modifier.clickable(onClick = onClick), headlineContent = { Text(item.title, maxLines = 2) },
-        supportingContent = { Text(listOf(item.artist, if (item.kind == "Audio") asset?.state ?: "Stream available" else item.kind.removePrefix("Music")).filter { it.isNotBlank() }.joinToString(" · "), maxLines = 2) },
+        supportingContent = {
+            val status = when {
+                item.kind != "Audio" -> item.kind.removePrefix("Music")
+                asset == null -> "Stream available"
+                asset.state == "Ready" -> ""
+                else -> asset.state
+            }
+            Text(listOf(item.artist, status).filter { it.isNotBlank() }.joinToString(" · "), maxLines = 2)
+        },
         leadingContent = { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
             AsyncImage(model = cover, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
                 error = rememberVectorPainter(Icons.Default.MusicNote), fallback = rememberVectorPainter(Icons.Default.MusicNote))
         } }, trailingContent = { IconButton(onClick = download) {
-            Icon(when (downloadState) {
-                DownloadState.COMPLETE -> Icons.Default.DownloadDone
-                DownloadState.PARTIAL -> Icons.Default.Downloading
-                DownloadState.NONE -> Icons.Default.Download
-            }, "${downloadState.label}: ${item.title}", tint = when (downloadState) {
+            Icon(downloadIcon(downloadState), "${downloadState.label}: ${item.title}", tint = when (downloadState) {
                 DownloadState.COMPLETE -> MaterialTheme.colorScheme.primary
                 DownloadState.PARTIAL -> MaterialTheme.colorScheme.tertiary
                 DownloadState.NONE -> MaterialTheme.colorScheme.onSurfaceVariant
             })
         } })
+}
+
+private fun downloadIcon(state: DownloadState): ImageVector = when (state) {
+    DownloadState.COMPLETE -> Icons.Default.DownloadDone
+    DownloadState.PARTIAL -> Icons.Default.Downloading
+    DownloadState.NONE -> Icons.Default.Download
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun ActionIcon(label: String, icon: ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
+    TooltipBox(positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } }, state = rememberTooltipState()) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
+            Icon(icon, contentDescription = label)
+        }
+    }
 }
 
 @Composable private fun Empty(title: String, description: String) {
