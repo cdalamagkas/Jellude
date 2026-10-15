@@ -33,11 +33,6 @@ Jellude cannot delete music files from your Jellyfin server. It does not offer w
   <img src="docs/screenshots/jellude-013-downloads.png" width="260" alt="Downloads with the ready-track count and repair, refresh and stop-keeping icons in one row, using generated test music">
 </p>
 
-<p>
-  <img src="docs/screenshots/jellude-013-now-playing.png" width="260" alt="Now playing with lyrics and repeat-song feedback, using generated test music">
-  <img src="docs/screenshots/jellude-013-playing-queue.png" width="260" alt="Playing queue showing current and next tracks, remove actions and Clear queue, using generated test music">
-</p>
-
 The Library, album and Downloads screenshots show the compact layout verified on an Android 17 (API 37) emulator. Test albums use placeholder artwork.
 
 ## Build from source
