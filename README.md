@@ -35,7 +35,7 @@ Jellude cannot delete music files from your Jellyfin server. It does not offer w
 ## Build from source
 
 1. Clone [cdalamagkas/Jellude](https://github.com/cdalamagkas/Jellude) and open the repository root in Android Studio.
-2. Use **Gradle JVM/JDK 21**, Android SDK **platform 35**, and **Build Tools 36.0.0**. Let Android Studio create the machine-local SDK configuration.
+2. Use **Gradle JVM/JDK 21**, Android SDK **platform 37**, and **Build Tools 36.0.0**. Let Android Studio create the machine-local SDK configuration.
 3. Sync Gradle and run the `app` configuration, or build from a terminal:
 
 ```sh
@@ -44,7 +44,7 @@ Jellude cannot delete music files from your Jellyfin server. It does not offer w
 
 On Windows PowerShell use `.\gradlew.bat` instead of `./gradlew`. The development APK is written to `app/build/outputs/apk/debug/app-debug.apk`; install it on your phone yourself. It is signed with your machine's debug key and may not update a build signed on another computer. Debug builds and CI reports are development tools, not official production releases.
 
-The project uses AGP 9.3.1, Gradle 9.5.0, Kotlin 2.4.21 and KSP 2.3.12. Compile/target SDK is 35; minimum SDK is 29. The application ID is `dev.jellude`.
+The project uses AGP 9.4.1, Gradle 9.8.1, Kotlin 2.4.21 and KSP 2.3.12. Compile SDK is 37; target SDK remains 35 and minimum SDK is 29. The application ID is `dev.jellude`.
 
 ## Connect and keep music offline
 

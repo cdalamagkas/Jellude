@@ -5,7 +5,7 @@ plugins {
 }
 android {
     namespace = "dev.jellude"
-    compileSdk = 35
+    compileSdk = 37
     defaultConfig {
         applicationId = "dev.jellude"
         minSdk = 29
