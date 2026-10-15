@@ -7,7 +7,7 @@ Use the bug/feature forms for public reports. Security vulnerabilities use the p
 ## Build and test
 
 1. Clone the repository and open its root in Android Studio.
-2. Use JDK/Gradle JVM 21, Android SDK platform 35, and Build Tools 36.0.0. Let Android Studio create your local SDK configuration.
+2. Use JDK/Gradle JVM 21, Android SDK platform 37, and Build Tools 36.0.0. Let Android Studio create your local SDK configuration.
 3. Create a topic branch from `main` and make a focused change.
 4. Run the following from the root (Windows PowerShell: replace `./gradlew` with `.\gradlew.bat`):
 
