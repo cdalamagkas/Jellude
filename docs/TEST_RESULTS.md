@@ -77,3 +77,21 @@ The new Android regressions exercise download icons, album/playlist system Back,
 Local verification used fresh ignored output directories because Windows denied deletion within a pre-existing generated BuildConfig directory. This does not change the project's normal build configuration.
 
 The packaged 0.1.3 APK has the same signing certificate as the preceding local APK. UI screenshots are saved as `screenshots/jellude-013-now-playing.png` and `screenshots/jellude-013-playing-queue.png`.
+
+## Optional ListenBrainz submission — 16 October 2026
+
+JDK 21, Android 17/API 37 Medium Phone emulator, generated WAV files, and local mock Jellyfin/ListenBrainz servers:
+
+| Check | Result |
+|---|---|
+| Core tests | 25 passed; 0 failures |
+| Android integration tests | 19 passed; 0 failures |
+| Debug APK build and installation | Passed |
+| Android lint | Passed |
+| ListenBrainz Settings visual review | Passed; `screenshots/jellude-listenbrainz-settings.png` |
+
+Six core listening-time tests cover pause/buffering exclusion, early skips, qualification at transitions, repeat occurrences, disabled/account-change behavior, the four-minute cap/unknown durations, and start timestamps. Seven ListenBrainz integration tests cover encrypted credentials and default-off behavior, offline queue persistence across database reopen, preserved custom metadata and original timestamps, local duplicate queue insertion, paused submission, explicit account switching, rate-limit delays, token rejection/reconnection, metadata/server errors, and prompt storage while another upload is slow. Two additional playback/UI tests exercise real offline ExoPlayer playback through the queue-to-mock-upload path and the optional Settings connection flow. The existing ten music/download/playlist/UI tests also pass.
+
+Commands: `./gradlew :core:test :app:assembleDebug :app:lintDebug :app:connectedDebugAndroidTest`.
+
+No real ListenBrainz token, personal listening history, or personal Jellyfin server was used. Live ListenBrainz account submission, physical-device background scheduling, extended offline queues, and process-termination/storage-failure campaigns remain unverified. Partial listen progress is intentionally in memory; qualified queued listens are persisted. Remote exactly-once delivery is not guaranteed after an ambiguous network failure.
