@@ -9,14 +9,24 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import dev.jellude.listenbrainz.ListenBrainzManager
+import dev.jellude.listenbrainz.ListenDatabase
 
 class JelludeApp : Application(), coil.ImageLoaderFactory {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     lateinit var store: SessionStore
     lateinit var http: OkHttpClient
+    lateinit var listenBrainz: ListenBrainzManager
     var repository: MusicRepository? = null
         private set
     override fun newImageLoader() = coil.ImageLoader.Builder(this).okHttpClient(http).build()
+    fun recordListen(listen: dev.jellude.core.QualifiedListen) {
+        applicationScope.launch {
+            try { listenBrainz.record(listen) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { listenBrainz.recordingFailed() }
+        }
+    }
     override fun onCreate() {
         super.onCreate()
         store = SessionStore(this)
@@ -41,6 +51,9 @@ class JelludeApp : Application(), coil.ImageLoaderFactory {
                     throw IOException("Server operation blocked: Jellude cannot delete server files")
                 chain.proceed(request)
             }.build()
+        listenBrainz = ListenBrainzManager(this, store,
+            Room.databaseBuilder(this, ListenDatabase::class.java, "listenbrainz.db").build())
+        listenBrainz.schedule()
         store.load()?.let(::openSession)
     }
     fun openSession(session: ServerSession) {

@@ -160,8 +160,8 @@ class MusicModel(application: android.app.Application) : AndroidViewModel(applic
     }
     fun toggleOffline(value: Boolean) {
         app.store.offline = value; offline = value
-        if (value) { app.http.dispatcher.cancelAll(); controller?.pause() }
-        else { repo?.requestSync(); action { repo?.repair(null, false) } }
+        if (value) { app.http.dispatcher.cancelAll(); app.listenBrainz.cancelNetwork(); controller?.pause() }
+        else { app.listenBrainz.schedule(replace = true); repo?.requestSync(); action { repo?.repair(null, false) } }
     }
     fun edit(id: String, operation: String, value: String) = action {
         repo!!.queueEdit(id, operation, value)
@@ -431,23 +431,24 @@ private fun downloadIcon(state: DownloadState): ImageVector = when (state) {
 @Composable private fun Settings(model: MusicModel, repo: MusicRepository, assets: List<Asset>) {
     var wifiOnly by remember { mutableStateOf(model.app.store.wifiOnly) }
     var signIn by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         ListItem(headlineContent = { Text("Offline mode") }, supportingContent = { Text("Blocks streaming and server requests") },
             trailingContent = { Switch(model.offline, model::toggleOffline) })
         ListItem(headlineContent = { Text("Download on unmetered networks only") }, supportingContent = { Text("Usually Wi-Fi; streaming is allowed while online") },
             trailingContent = { Switch(wifiOnly, { value -> wifiOnly = value; model.app.store.wifiOnly = value; model.action { repo.rescheduleDownloads() } }) })
+        dev.jellude.listenbrainz.ListenBrainzSettings(model.app.listenBrainz, model.offline)
         Text(repo.session.url, style = MaterialTheme.typography.bodyMedium)
         TextButton(enabled = !model.offline && !model.busy, onClick = { signIn = true }) { Text("Sign in again") }
         Text("${assets.filter { it.state == "Ready" }.sumOf { it.bytes } / (1024 * 1024)} MB downloaded")
         Button(enabled = !model.busy && !model.offline, onClick = { model.action { repo.sync() } }) { Text("Sync metadata and playlists") }
         OutlinedButton(enabled = !model.busy, onClick = { model.action { repo.repair(null, true) } }) { Text("Verify and repair downloads") }
         var clean by remember { mutableStateOf(false) }
-        OutlinedButton(onClick = { clean = true }) { Text("Clean up unused phone downloads") }
-        Text("Downloads keeps the items you chose available offline and repairable. Stop keeping offline removes that requirement but leaves existing phone copies. Cleanup removes only copies no longer needed by any offline item. Shared tracks are kept. Uninstalling the app removes its downloads.", style = MaterialTheme.typography.bodySmall)
-        Text("Cleanup affects this phone only. Jellude cannot delete music files from your Jellyfin server.", style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = { clean = true }) { Text("Clean up unused local downloads") }
+        Text("Downloads keeps the items you chose available offline and repairable. Stop keeping offline removes that requirement but leaves existing local copies. Cleanup removes only copies no longer needed by any offline item. Shared tracks are kept. Uninstalling the app removes its downloads.", style = MaterialTheme.typography.bodySmall)
+        Text("Cleanup affects this device only. Jellude cannot delete music files from your Jellyfin server.", style = MaterialTheme.typography.bodySmall)
         Text("${stringResource(R.string.app_name)} ${BuildConfig.VERSION_NAME} · Background downloads may wait for Android scheduling. Open the app and use Repair to continue interrupted work.", style = MaterialTheme.typography.bodySmall)
-        if (clean) AlertDialog(onDismissRequest = { clean = false }, title = { Text("Clean up phone downloads?") }, text = { Text("Remove downloaded audio from this phone only when no offline item needs it. Tracks still needed by any downloaded song, album, artist, or playlist are kept. Nothing is deleted from Jellyfin.") },
-            confirmButton = { TextButton(onClick = { model.action { repo.cleanUnreferenced() }; clean = false }) { Text("Clean up phone") } },
+        if (clean) AlertDialog(onDismissRequest = { clean = false }, title = { Text("Clean up local downloads?") }, text = { Text("Remove downloaded audio from this device only when no offline item needs it. Tracks still needed by any downloaded song, album, artist, or playlist are kept. Nothing is deleted from Jellyfin.") },
+            confirmButton = { TextButton(onClick = { model.action { repo.cleanUnreferenced() }; clean = false }) { Text("Clean up downloads") } },
             dismissButton = { TextButton(onClick = { clean = false }) { Text("Cancel") } })
         if (signIn) {
             var user by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }

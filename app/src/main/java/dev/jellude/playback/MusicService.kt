@@ -21,6 +21,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.guava.future
 import org.json.JSONArray
 import org.json.JSONObject
+import dev.jellude.core.ListenTrack
+import dev.jellude.core.ListenTracker
+import android.os.SystemClock
 
 @androidx.annotation.OptIn(UnstableApi::class)
 class MusicService : MediaLibraryService() {
@@ -28,6 +31,17 @@ class MusicService : MediaLibraryService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val app get() = application as JelludeApp
     private val repo get() = app.repository
+    private val listenTracker = ListenTracker()
+
+    private fun trackListen(player: Player, newOccurrence: Boolean = false) {
+        val connection = app.listenBrainz.connection.value
+        val current = player.currentMediaItem
+        val metadata = current?.mediaMetadata
+        val track = current?.let { ListenTrack(it.mediaId, metadata?.title?.toString().orEmpty(),
+            metadata?.artist?.toString().orEmpty(), metadata?.albumTitle?.toString().orEmpty(), player.duration.coerceAtLeast(0)) }
+        listenTracker.sample(connection.username.takeIf { connection.enabled }, track, player.isPlaying,
+            SystemClock.elapsedRealtime(), System.currentTimeMillis() / 1000, newOccurrence).forEach(app::recordListen)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -52,8 +66,15 @@ class MusicService : MediaLibraryService() {
                 .put("position", player.currentPosition).put("shuffle", player.shuffleModeEnabled).put("repeat", player.repeatMode).toString()).apply()
         }
         player.addListener(object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) { saveQueue() }
+            override fun onEvents(player: Player, events: Player.Events) { saveQueue(); trackListen(player) }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                trackListen(player, newOccurrence = true)
+            }
         })
+        scope.launch {
+            app.listenBrainz.connection.collect { trackListen(player, newOccurrence = true) }
+        }
+        scope.launch { while (isActive) { delay(1_000); trackListen(player) } }
         scope.launch {
             try {
                 val stored = prefs.getString(key, null)?.let(::JSONObject)
@@ -78,7 +99,10 @@ class MusicService : MediaLibraryService() {
         }
     }
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
-    override fun onDestroy() { session.player.release(); session.release(); scope.cancel(); super.onDestroy() }
+    override fun onDestroy() {
+        trackListen(session.player)
+        session.player.release(); session.release(); scope.cancel(); super.onDestroy()
+    }
 
     private fun folder(id: String, title: String) = MediaItem.Builder().setMediaId(id)
         .setMediaMetadata(MediaMetadata.Builder().setTitle(title).setIsBrowsable(true).setIsPlayable(false)

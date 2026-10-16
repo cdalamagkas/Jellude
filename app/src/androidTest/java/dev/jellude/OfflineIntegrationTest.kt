@@ -27,6 +27,9 @@ import org.junit.runner.RunWith
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicInteger
+import dev.jellude.listenbrainz.ListenBrainzManager
+import dev.jellude.listenbrainz.ListenDatabase
+import kotlinx.coroutines.flow.first
 
 @RunWith(AndroidJUnit4::class)
 class OfflineIntegrationTest {
@@ -172,6 +175,58 @@ class OfflineIntegrationTest {
         assertEquals(repair.top, release.top, 1f)
         assertTrue(repair.right <= refresh.left && refresh.right <= release.left)
         screenshot("compact-downloads")
+    }
+    @Test fun listenBrainzSettingsAreOptionalAndExplainSubmission() {
+        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithText("Connect ListenBrainz").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Not connected").assertIsDisplayed()
+        screenshot("listenbrainz-settings")
+        compose.onNodeWithText("Connect ListenBrainz").performClick()
+        compose.onNodeWithText("ListenBrainz user token").assertIsDisplayed()
+        compose.onNodeWithText("Connect and enable").assertIsNotEnabled()
+        compose.onNodeWithText("Cancel").performClick()
+        assertFalse(app.listenBrainz.connection.value.enabled)
+    }
+    @Test fun actualOfflinePlaybackQueuesListenAndUploadsToMockListenBrainz() = runBlocking {
+        repo.select(repo.dao.item(albumId)!!, false)
+        awaitComplete()
+        val lbServer = MockWebServer().apply { start() }
+        val lbDatabase = androidx.room.Room.inMemoryDatabaseBuilder(app, ListenDatabase::class.java).build()
+        val originalManager = app.listenBrainz
+        val manager = ListenBrainzManager(app, app.store, lbDatabase, lbServer.url("/1/"), scheduleWork = false)
+        try {
+            lbServer.enqueue(MockResponse().setBody("{\"valid\":true,\"user_name\":\"test-listener\"}"))
+            manager.connect("11111111-1111-1111-1111-111111111111")
+            lbServer.takeRequest()
+            app.listenBrainz = manager
+            app.store.offline = true
+            val before = System.currentTimeMillis() / 1000
+            lateinit var model: MusicModel
+            scenario!!.onActivity { model = ViewModelProvider(it)[MusicModel::class.java] }
+            compose.waitUntil(10_000) { model.controller != null }
+            val songs = repo.dao.items().filter { it.kind == "Audio" }.take(1)
+            withContext(Dispatchers.Main) { model.play(songs) }
+            withTimeout(20_000) {
+                while (lbDatabase.listens().observeSummary().first().total == 0) delay(100)
+            }
+            withContext(Dispatchers.Main) { model.controller!!.pause() }
+            val row = lbDatabase.listens().pending("test-listener").single()
+            assertEquals(songs.single().title, row.title)
+            assertTrue(row.startedAt >= before)
+            assertEquals(1, lbServer.requestCount)
+            app.store.offline = false
+            lbServer.enqueue(MockResponse())
+            assertFalse(manager.upload())
+            val payload = JSONObject(lbServer.takeRequest().body.readUtf8()).getJSONArray("payload").getJSONObject(0)
+            assertEquals(row.startedAt, payload.getLong("listened_at"))
+            assertEquals(row.artist, payload.getJSONObject("track_metadata").getString("artist_name"))
+        } finally {
+            app.store.offline = false
+            app.listenBrainz = originalManager
+            app.store.forgetListenBrainz()
+            lbDatabase.close()
+            lbServer.shutdown()
+        }
     }
     @Test fun downloadedTrackPlaysOfflineAndAutoBrowserExposesIt() = runBlocking {
         repo.select(repo.dao.item(albumId)!!, false)

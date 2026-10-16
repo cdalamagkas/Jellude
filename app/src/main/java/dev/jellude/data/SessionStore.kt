@@ -17,8 +17,8 @@ data class ServerSession(val url: String, val userId: String, val token: String,
         .digest("$serverId|$userId".toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
 }
 
-class SessionStore(context: Context) {
-    private val prefs = context.getSharedPreferences("session", Context.MODE_PRIVATE)
+class SessionStore(context: Context, preferencesName: String = "session") {
+    private val prefs = context.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey("jellude-session", null) as? SecretKey)?.let { return it }
@@ -43,6 +43,24 @@ class SessionStore(context: Context) {
         val json = JSONObject(String(cipher.doFinal(Base64.decode(data, Base64.NO_WRAP))))
         return ServerSession(json.getString("url"), json.getString("user"), json.getString("token"), json.getString("server"))
     }
+    fun saveListenBrainz(token: String, username: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
+        val data = JSONObject().put("token", token).put("username", username).toString()
+        check(prefs.edit().putString("lb_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("lb_data", Base64.encodeToString(cipher.doFinal(data.toByteArray()), Base64.NO_WRAP)).commit())
+    }
+    fun loadListenBrainz(): Pair<String, String>? {
+        val data = prefs.getString("lb_data", null) ?: return null
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(prefs.getString("lb_iv", ""), Base64.NO_WRAP)))
+        }
+        val json = JSONObject(String(cipher.doFinal(Base64.decode(data, Base64.NO_WRAP))))
+        return json.getString("token") to json.getString("username")
+    }
+    fun forgetListenBrainz() { check(prefs.edit().remove("lb_iv").remove("lb_data").putBoolean("lb_enabled", false).commit()) }
+    var listenBrainzEnabled: Boolean
+        get() = prefs.getBoolean("lb_enabled", false)
+        set(value) { check(prefs.edit().putBoolean("lb_enabled", value).commit()) }
     var offline: Boolean
         get() = prefs.getBoolean("offline", false)
         set(value) { prefs.edit().putBoolean("offline", value).apply() }
