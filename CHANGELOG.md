@@ -4,6 +4,7 @@ Dates below record development milestones. These entries are not binary-release 
 
 ## Unreleased
 
+- Optional direct ListenBrainz submission with encrypted token setup, durable offline listen queue, retry/error controls, and custom-recording metadata without inferred MusicBrainz IDs. Tracking excludes pauses, buffering, and seek jumps; Offline mode blocks uploads.
 - Offline library and Android Auto browsing hide unavailable music and empty collections.
 - Stopped offline selections remain visible as local, unsynchronized copies until cleanup removes their files.
 - Expanded artwork player with elapsed/total/remaining time, encoding details, compact queue/lyrics buttons, and scrolling timed lyrics; artwork and seeking in the mini player.
